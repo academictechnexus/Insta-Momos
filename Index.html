@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Insta Momos — POS System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --black:#080808;--dark:#101010;--panel:#181818;--panel2:#141414;
+  --border:#222;--border2:#2c2c2c;
+  --gold:#f5c518;--gold2:#ffd740;
+  --red:#ff2d55;--cyan:#00e5ff;--green:#2ecc71;--orange:#ff7f00;--purple:#a78bfa;
+  --text:#e4e4e4;--muted:#555;--muted2:#888;--white:#fff;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--black);color:var(--text);font-family:'Rajdhani',sans-serif;font-size:15px;min-height:100vh;overflow-x:hidden}
+button,input,select{font-family:'Rajdhani',sans-serif}
+
+/* LOADING */
+#loading-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh}
+.spinner{width:38px;height:38px;border:3px solid var(--border2);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;margin-bottom:16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--muted2)}
+#loading-err{display:none;text-align:center;padding:40px;max-width:500px}
+#loading-err h2{font-family:'Bebas Neue';font-size:28px;color:var(--red);letter-spacing:2px;margin-bottom:10px}
+#loading-err p{font-size:13px;color:var(--muted2);line-height:1.9}
+#loading-err code{font-family:'Space Mono';font-size:11px;color:var(--muted);display:block;margin-top:10px;word-break:break-all}
+
+/* LOGIN */
+#login-screen{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;position:relative;overflow:hidden}
+#login-screen::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 70% 40% at 50% 20%,rgba(245,197,24,.05),transparent 70%),repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(255,255,255,.015) 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(255,255,255,.015) 40px);pointer-events:none}
+.login-wrap{position:relative;z-index:1;text-align:center}
+.login-logo{font-family:'Bebas Neue';font-size:64px;letter-spacing:8px;line-height:1}
+.login-logo .r{color:var(--red)}.login-logo .g{color:var(--gold)}
+.login-tag{font-size:11px;letter-spacing:5px;color:var(--muted2);text-transform:uppercase;margin:8px 0 40px}
+.login-cards{display:flex;gap:18px;flex-wrap:wrap;justify-content:center}
+.lcard{width:210px;background:var(--panel);border:1px solid var(--border2);padding:28px 20px;cursor:pointer;transition:transform .25s,border-color .25s,box-shadow .25s;text-align:center;position:relative;overflow:hidden}
+.lcard::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px}
+.lcard.adm::after{background:var(--gold)}.lcard.b1::after{background:var(--cyan)}.lcard.b2::after{background:var(--red)}
+.lcard:hover{transform:translateY(-5px)}
+.lcard.adm:hover{border-color:var(--gold);box-shadow:0 12px 40px rgba(245,197,24,.12)}
+.lcard.b1:hover{border-color:var(--cyan);box-shadow:0 12px 40px rgba(0,229,255,.10)}
+.lcard.b2:hover{border-color:var(--red);box-shadow:0 12px 40px rgba(255,45,85,.10)}
+.lcard-icon{font-size:40px;margin-bottom:12px;display:block}
+.lcard-title{font-family:'Bebas Neue';font-size:22px;letter-spacing:2px;margin-bottom:5px}
+.lcard.adm .lcard-title{color:var(--gold)}.lcard.b1 .lcard-title{color:var(--cyan)}.lcard.b2 .lcard-title{color:var(--red)}
+.lcard-sub{font-size:11px;color:var(--muted2);letter-spacing:1px;line-height:1.6}
+.login-ver{margin-top:36px;font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase}
+
+/* PIN */
+.pin-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9000;align-items:center;justify-content:center}
+.pin-overlay.open{display:flex}
+.pin-box{background:var(--dark);border:1px solid var(--border2);padding:36px 32px;width:320px;text-align:center;animation:fadeUp .25s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.pin-heading{font-family:'Bebas Neue';font-size:24px;letter-spacing:2px;margin-bottom:4px}
+.pin-sub{font-size:12px;color:var(--muted2);margin-bottom:24px;letter-spacing:1px}
+.pin-dots{display:flex;justify-content:center;gap:12px;margin-bottom:22px}
+.pdot{width:14px;height:14px;border-radius:50%;border:2px solid var(--border2);background:transparent;transition:all .15s}
+.pdot.fill{background:var(--gold);border-color:var(--gold)}
+.pdot.shake{animation:shake .3s ease}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px}
+.pkey{background:var(--panel);border:1px solid var(--border2);color:var(--text);font-family:'Space Mono';font-size:20px;padding:15px;cursor:pointer;transition:all .15s}
+.pkey:hover{background:var(--border2)}
+.pkey.del{font-size:13px;font-family:'Rajdhani';font-weight:700;color:var(--muted2)}
+.pkey.empty{background:transparent;border-color:transparent;cursor:default;pointer-events:none}
+.pin-err{color:var(--red);font-size:12px;min-height:18px;margin-top:4px;letter-spacing:1px}
+.pin-cancel{margin-top:14px;background:none;border:none;color:var(--muted2);font-size:12px;letter-spacing:1px;cursor:pointer;text-transform:uppercase;transition:color .2s}
+.pin-cancel:hover{color:var(--text)}
+
+/* APP */
+#app{display:none}
+.header{background:var(--dark);border-bottom:2px solid var(--border2);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:58px;position:sticky;top:0;z-index:200;transition:border-color .3s}
+.header.role-admin{border-bottom-color:var(--gold)}
+.header.role-b1{border-bottom-color:var(--cyan)}
+.header.role-b2{border-bottom-color:var(--red)}
+.h-logo{font-family:'Bebas Neue';font-size:22px;letter-spacing:3px}
+.h-logo .r{color:var(--red)}.h-logo .g{color:var(--gold)}
+.h-right{display:flex;align-items:center;gap:14px}
+.h-sync{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;padding:4px 10px;transition:all .3s}
+.h-sync.live{background:rgba(46,204,113,.1);color:var(--green);border:1px solid rgba(46,204,113,.2)}
+.h-sync.off{background:rgba(255,45,85,.1);color:var(--red);border:1px solid rgba(255,45,85,.2)}
+.role-pill{padding:4px 14px;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase}
+.role-pill.admin{background:rgba(245,197,24,.1);color:var(--gold);border:1px solid rgba(245,197,24,.25)}
+.role-pill.b1{background:rgba(0,229,255,.1);color:var(--cyan);border:1px solid rgba(0,229,255,.2)}
+.role-pill.b2{background:rgba(255,45,85,.1);color:var(--red);border:1px solid rgba(255,45,85,.2)}
+.h-clock{font-family:'Space Mono';font-size:11px;color:var(--muted2)}
+.h-logout{background:transparent;border:1px solid var(--border2);color:var(--muted2);padding:5px 14px;cursor:pointer;font-weight:700;font-size:11px;letter-spacing:1px;text-transform:uppercase;transition:all .2s}
+.h-logout:hover{border-color:var(--red);color:var(--red)}
+
+/* NAV */
+.nav-tabs{background:var(--dark);border-bottom:1px solid var(--border);padding:0 20px;display:flex;overflow-x:auto}
+.tab{padding:13px 22px;cursor:pointer;font-weight:700;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);border-bottom:3px solid transparent;transition:all .2s;white-space:nowrap;flex-shrink:0}
+.tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+.tab:hover:not(.active){color:var(--text)}
+.tab.adm-only{display:none}
+
+/* MAIN */
+.main{padding:20px;max-width:1500px;margin:0 auto}
+.section{display:none}.section.active{display:block}
+
+/* STAT CARDS */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+.stat-card{background:var(--panel);border:1px solid var(--border);padding:18px 20px;position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%}
+.sc-gold::before{background:var(--gold)}.sc-red::before{background:var(--red)}
+.sc-cyan::before{background:var(--cyan)}.sc-green::before{background:var(--green)}
+.sc-orange::before{background:var(--orange)}.sc-purple::before{background:var(--purple)}
+.slabel{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted2);margin-bottom:5px}
+.sval{font-family:'Bebas Neue';font-size:32px;color:var(--white);line-height:1.1}
+.ssub{font-size:11px;color:var(--muted);margin-top:3px}
+
+/* TABLE WRAPPER */
+.tw{background:var(--panel);border:1px solid var(--border);overflow:hidden;margin-bottom:22px}
+.tw-head{display:flex;justify-content:space-between;align-items:center;padding:13px 18px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:10px}
+.tw-title{font-family:'Bebas Neue';font-size:18px;letter-spacing:2px;color:var(--gold)}
+table{width:100%;border-collapse:collapse}
+th{background:#171717;padding:9px 13px;text-align:left;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted2);font-weight:700;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:10px 13px;border-bottom:1px solid #1a1a1a;font-size:13px;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.018)}
+.empty-row{text-align:center;color:var(--muted2);padding:32px!important}
+
+/* BUTTONS */
+.btn{padding:8px 18px;border:none;cursor:pointer;font-family:'Rajdhani';font-weight:700;font-size:12px;letter-spacing:1px;text-transform:uppercase;transition:all .2s;display:inline-flex;align-items:center;gap:5px}
+.btn-gold{background:var(--gold);color:#000}.btn-gold:hover{background:var(--gold2)}
+.btn-outline{background:transparent;border:1px solid var(--border2);color:var(--text)}.btn-outline:hover{border-color:var(--gold);color:var(--gold)}
+.btn-cyan{background:var(--cyan);color:#000}
+.btn-green{background:var(--green);color:#000}.btn-green:hover{filter:brightness(1.1)}
+.btn-purple{background:var(--purple);color:#000}.btn-purple:hover{filter:brightness(1.1)}
+.btn-danger{background:rgba(255,45,85,.1);color:var(--red);border:1px solid rgba(255,45,85,.25)}.btn-danger:hover{background:var(--red);color:#fff;border-color:var(--red)}
+.btn-sm{padding:5px 12px;font-size:11px}
+
+/* BADGES */
+.badge{display:inline-block;padding:3px 8px;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.bg-steamed{background:rgba(0,229,255,.1);color:var(--cyan);border:1px solid rgba(0,229,255,.2)}
+.bg-fried{background:rgba(245,197,24,.1);color:var(--gold);border:1px solid rgba(245,197,24,.2)}
+.bg-crispy{background:rgba(255,45,85,.1);color:var(--red);border:1px solid rgba(255,45,85,.2)}
+.bg-tandoori{background:rgba(255,127,0,.1);color:var(--orange);border:1px solid rgba(255,127,0,.2)}
+.bg-mojito{background:rgba(46,204,113,.1);color:var(--green);border:1px solid rgba(46,204,113,.2)}
+.badge-ok{background:rgba(46,204,113,.08);color:var(--green);border:1px solid rgba(46,204,113,.18)}
+.badge-low{background:rgba(255,45,85,.08);color:var(--red);border:1px solid rgba(255,45,85,.18)}
+.badge-b1{background:rgba(0,229,255,.08);color:var(--cyan);border:1px solid rgba(0,229,255,.18)}
+.badge-b2{background:rgba(255,45,85,.08);color:var(--red);border:1px solid rgba(255,45,85,.18)}
+.badge-paid{background:rgba(46,204,113,.08);color:var(--green);border:1px solid rgba(46,204,113,.18)}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:1000;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:var(--dark);border:1px solid rgba(245,197,24,.25);width:520px;max-width:96vw;max-height:92vh;overflow-y:auto;animation:fadeUp .22s ease}
+.modal-head{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.modal-title{font-family:'Bebas Neue';font-size:20px;letter-spacing:2px;color:var(--gold)}
+.modal-close{background:none;border:none;color:var(--muted2);font-size:22px;cursor:pointer;line-height:1}
+.modal-close:hover{color:var(--red)}
+.modal-body{padding:22px}
+.modal-foot{padding:14px 22px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.form-group{margin-bottom:16px}
+label{display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted2);margin-bottom:5px;font-weight:700}
+input,select{width:100%;background:var(--panel);border:1px solid var(--border2);color:var(--text);padding:9px 12px;font-size:14px;outline:none;transition:border-color .2s}
+input:focus,select:focus{border-color:var(--gold)}
+select option{background:var(--dark)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.info-box{background:var(--panel2);border-left:3px solid var(--gold);padding:12px 14px;font-size:12px;color:var(--muted2);line-height:1.8;margin-bottom:16px}
+.info-box b{color:var(--text)}
+
+/* BILLING */
+.billing-layout{display:grid;grid-template-columns:1fr 370px;gap:20px}
+.cat-filters{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+.cf{padding:5px 14px;background:var(--panel);border:1px solid var(--border);color:var(--muted2);cursor:pointer;font-weight:700;font-size:11px;letter-spacing:1px;text-transform:uppercase;transition:all .2s}
+.cf.active{border-color:var(--gold);color:var(--gold);background:rgba(245,197,24,.07)}
+.menu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:10px}
+.menu-card{background:var(--panel);border:1px solid var(--border);padding:14px;cursor:pointer;transition:all .2s}
+.menu-card:hover{border-color:var(--gold);transform:translateY(-2px)}
+.menu-card.oos{opacity:.4;cursor:not-allowed;pointer-events:none}
+.mc-name{font-weight:700;font-size:14px;margin:8px 0 2px}
+.mc-price{font-family:'Bebas Neue';font-size:26px;color:var(--gold)}
+.mc-stock{font-size:11px;margin-top:3px}
+.cart-panel{background:var(--panel);border:1px solid var(--border);display:flex;flex-direction:column;max-height:calc(100vh - 150px);position:sticky;top:115px}
+.cart-head{padding:13px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.cart-title{font-family:'Bebas Neue';font-size:18px;letter-spacing:2px;color:var(--cyan)}
+.cart-body{flex:1;overflow-y:auto}
+.cart-item{padding:10px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #1a1a1a}
+.ci-info{flex:1}.ci-name{font-size:13px;font-weight:600}.ci-unit{font-size:11px;color:var(--muted2)}
+.ci-price{font-size:13px;color:var(--gold);min-width:52px;text-align:right}
+.qty-c{display:flex;align-items:center;gap:7px}
+.qb{width:24px;height:24px;background:var(--border2);border:none;color:var(--text);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.qb:hover{background:var(--gold);color:#000}
+.qn{font-family:'Space Mono';font-size:12px;min-width:18px;text-align:center}
+.cart-foot{padding:14px 18px;border-top:1px solid var(--border)}
+.cr{display:flex;justify-content:space-between;margin-bottom:7px;font-size:14px}
+.cr.total{font-family:'Bebas Neue';font-size:22px;color:var(--gold);margin-top:10px;border-top:1px solid var(--border);padding-top:10px}
+.cart-inputs{margin-bottom:12px;display:flex;flex-direction:column;gap:7px}
+
+/* TOOLBAR */
+.toolbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.sbox{background:var(--panel);border:1px solid var(--border2);color:var(--text);padding:7px 12px;font-size:13px;outline:none;min-width:160px}
+.sbox:focus{border-color:var(--gold)}
+.fsel{background:var(--panel);border:1px solid var(--border2);color:var(--text);padding:7px 12px;font-size:13px;cursor:pointer;outline:none}
+
+/* STOCK ENTRY TABLE */
+.se-table{width:100%;border-collapse:collapse}
+.se-table th{background:#171717;padding:10px 13px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted2);font-weight:700;border-bottom:1px solid var(--border);text-align:left}
+.se-table td{padding:8px 13px;border-bottom:1px solid #1a1a1a;vertical-align:middle}
+.se-table td input{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:7px 10px;font-size:14px;outline:none;width:100px;text-align:center;transition:border-color .2s}
+.se-table td input:focus{border-color:var(--gold)}
+.se-table tr:hover td{background:rgba(255,255,255,.015)}
+
+/* TOAST */
+.toast{position:fixed;bottom:20px;right:20px;background:var(--panel);border-left:3px solid var(--green);padding:12px 18px;font-weight:600;z-index:9999;transform:translateX(130%);transition:transform .3s;font-size:13px;max-width:290px;border-right:1px solid var(--border2);border-top:1px solid var(--border2);border-bottom:1px solid var(--border2)}
+.toast.show{transform:translateX(0)}
+.toast.err{border-left-color:var(--red)}
+.toast.warn{border-left-color:var(--gold)}
+
+/* COLOR HELPERS */
+.c-gold{color:var(--gold)}.c-red{color:var(--red)}.c-green{color:var(--green)}
+.c-muted{color:var(--muted2)}.c-low{color:var(--red);font-weight:700}.c-ok{color:var(--green)}.fw7{font-weight:700}
+
+/* ADMIN GRID */
+.admin-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
+.section-title{font-family:'Bebas Neue';font-size:22px;letter-spacing:2px;color:var(--gold);margin-bottom:16px}
+.section-title span{font-size:13px;color:var(--muted2);font-family:'Rajdhani';font-weight:400;letter-spacing:1px;margin-left:10px}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--dark)}
+::-webkit-scrollbar-thumb{background:var(--border2)}
+
+/* RESPONSIVE */
+@media(max-width:960px){
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+  .billing-layout{grid-template-columns:1fr}
+  .cart-panel{position:static;max-height:none}
+  .admin-grid-2{grid-template-columns:1fr}
+}
+@media(max-width:520px){
+  .login-logo{font-size:44px}
+  .stats-grid{grid-template-columns:1fr 1fr}
+  .form-row{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <div class="loading-text">Connecting to Firebase…</div>
+  <div id="loading-err">
+    <h2>Firebase Connection Failed</h2>
+    <p>Open this file, find <b style="color:var(--gold)">firebaseConfig</b> near the top of the &lt;script&gt; section, and paste your real Firebase project keys there.</p>
+    <code id="loading-err-msg"></code>
+  </div>
+</div>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-wrap">
+    <div class="login-logo"><span class="r">INSTA</span> <span class="g">MOMOS</span></div>
+    <div class="login-tag">...Dip · Bite · Enjoy...</div>
+    <div class="login-cards">
+      <div class="lcard adm" onclick="showPin('admin')">
+        <span class="lcard-icon">👑</span>
+        <div class="lcard-title">Admin</div>
+        <div class="lcard-sub">Full access · Both branches<br>Stock, Transfers & Reports</div>
+      </div>
+      <div class="lcard b1" onclick="showPin('b1')">
+        <span class="lcard-icon">🏪</span>
+        <div class="lcard-title">Branch 1</div>
+        <div class="lcard-sub">Billing & stock view<br>Branch 1 operations</div>
+      </div>
+      <div class="lcard b2" onclick="showPin('b2')">
+        <span class="lcard-icon">🏪</span>
+        <div class="lcard-title">Branch 2</div>
+        <div class="lcard-sub">Billing & stock view<br>Branch 2 operations</div>
+      </div>
+    </div>
+    <div class="login-ver">Insta Momos POS v3.0 · academictechnexus.com</div>
+  </div>
+</div>
+
+<!-- PIN OVERLAY -->
+<div class="pin-overlay" id="pin-overlay">
+  <div class="pin-box">
+    <div class="pin-heading" id="pin-heading">Enter PIN</div>
+    <div class="pin-sub" id="pin-sub">4-digit access code</div>
+    <div class="pin-dots" id="pin-dots">
+      <div class="pdot" id="pd0"></div><div class="pdot" id="pd1"></div>
+      <div class="pdot" id="pd2"></div><div class="pdot" id="pd3"></div>
+    </div>
+    <div class="pin-pad">
+      <button class="pkey" onclick="pinKey('1')">1</button><button class="pkey" onclick="pinKey('2')">2</button><button class="pkey" onclick="pinKey('3')">3</button>
+      <button class="pkey" onclick="pinKey('4')">4</button><button class="pkey" onclick="pinKey('5')">5</button><button class="pkey" onclick="pinKey('6')">6</button>
+      <button class="pkey" onclick="pinKey('7')">7</button><button class="pkey" onclick="pinKey('8')">8</button><button class="pkey" onclick="pinKey('9')">9</button>
+      <button class="pkey empty"></button><button class="pkey" onclick="pinKey('0')">0</button><button class="pkey del" onclick="pinDel()">⌫ DEL</button>
+    </div>
+    <div class="pin-err" id="pin-err"></div>
+    <button class="pin-cancel" onclick="closePin()">Cancel</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="header" id="app-header">
+    <div class="h-logo"><span class="r">INSTA</span> <span class="g">MOMOS</span></div>
+    <div class="h-right">
+      <span class="h-sync live" id="sync-badge">● LIVE</span>
+      <span class="role-pill" id="role-pill">ADMIN</span>
+      <span class="h-clock" id="h-clock"></span>
+      <button class="h-logout" onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="nav-tabs">
+    <div class="tab active" data-tab="dashboard" onclick="switchTab('dashboard',this)">📊 Dashboard</div>
+    <div class="tab" data-tab="billing" onclick="switchTab('billing',this)">🧾 Billing</div>
+    <div class="tab adm-only" data-tab="stock" onclick="switchTab('stock',this)">📦 Stock Entry</div>
+    <div class="tab adm-only" data-tab="transfer" onclick="switchTab('transfer',this)">🔄 Stock Transfer</div>
+    <div class="tab adm-only" data-tab="inventory" onclick="switchTab('inventory',this)">🗂 Inventory</div>
+    <div class="tab adm-only" data-tab="history" onclick="switchTab('history',this)">📋 Sales History</div>
+    <div class="tab adm-only" data-tab="reports" onclick="switchTab('reports',this)">📈 Reports</div>
+    <div class="tab adm-only" data-tab="adminpanel" onclick="switchTab('adminpanel',this)">⚙ Admin</div>
+  </div>
+
+  <div class="main">
+
+    <!-- DASHBOARD -->
+    <div class="section active" id="tab-dashboard">
+      <div class="stats-grid">
+        <div class="stat-card sc-gold"><div class="slabel">Today's Revenue</div><div class="sval" id="ds-revenue">₹0</div><div class="ssub" id="ds-rev-branch">Loading…</div></div>
+        <div class="stat-card sc-red"><div class="slabel">Orders Today</div><div class="sval" id="ds-orders">0</div><div class="ssub">Bills Generated</div></div>
+        <div class="stat-card sc-cyan"><div class="slabel">Avg. Order Value</div><div class="sval" id="ds-avg">₹0</div><div class="ssub">Per Bill</div></div>
+        <div class="stat-card sc-green"><div class="slabel">Top Seller Today</div><div class="sval" id="ds-top" style="font-size:17px;padding-top:7px">—</div><div class="ssub">Most ordered</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div class="tw">
+          <div class="tw-head"><div class="tw-title">Sales by Category</div></div>
+          <table><thead><tr><th>Category</th><th>Qty</th><th>Revenue</th></tr></thead><tbody id="dash-cats"></tbody></table>
+        </div>
+        <div class="tw">
+          <div class="tw-head"><div class="tw-title">⚠ Low Stock Alerts</div></div>
+          <table><thead><tr><th>Item</th><th>Branch</th><th>Stock</th><th>Status</th></tr></thead><tbody id="dash-stock"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- BILLING -->
+    <div class="section" id="tab-billing">
+      <div class="billing-layout">
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+            <div style="font-family:'Bebas Neue';font-size:20px;letter-spacing:2px;color:var(--gold)" id="billing-label">Branch 1 — Menu</div>
+            <input class="sbox" placeholder="🔍 Search item…" id="menu-search" oninput="filterMenu()">
+          </div>
+          <div class="cat-filters" id="cat-filters"></div>
+          <div class="menu-grid" id="menu-grid"><div class="c-muted" style="padding:20px">Loading…</div></div>
+        </div>
+        <div class="cart-panel">
+          <div class="cart-head"><div class="cart-title">🧾 Current Bill</div><button class="btn btn-outline btn-sm" onclick="clearCart()">Clear</button></div>
+          <div class="cart-body" id="cart-body"><div style="padding:24px;text-align:center;color:var(--muted2);font-size:13px">Add items from the menu</div></div>
+          <div class="cart-foot">
+            <div class="cart-inputs">
+              <input id="cust-name" placeholder="Customer name (optional)">
+              <input id="cust-phone" placeholder="Phone number (optional)">
+            </div>
+            <div class="cr"><span>Subtotal</span><span id="c-sub">₹0</span></div>
+            <div class="cr"><span>GST (5%)</span><span id="c-gst">₹0</span></div>
+            <div class="cr total"><span>TOTAL</span><span id="c-total">₹0</span></div>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button class="btn btn-outline" style="flex:1" onclick="previewBill()">Preview</button>
+              <button class="btn btn-gold" style="flex:1" onclick="finalizeBill()">Generate Bill</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STOCK ENTRY -->
+    <div class="section" id="tab-stock">
+      <div class="tw">
+        <div class="tw-head">
+          <div class="tw-title">Stock Entry by Date</div>
+          <div class="toolbar">
+            <div>
+              <label style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted2);display:block;margin-bottom:4px">Select Date</label>
+              <input type="date" class="sbox" id="stock-date" style="min-width:160px">
+            </div>
+            <button class="btn btn-gold" onclick="saveStockEntry()" style="margin-top:18px">💾 Save Stock Entry</button>
+          </div>
+        </div>
+        <div class="info-box" style="margin:0;border-radius:0;border:none;border-bottom:1px solid var(--border)">
+          <b>How to use:</b> Select a date → enter the stock quantity you want to SET for each item in each branch → click Save. Leave blank to skip that item. Every entry is logged to Firebase with a timestamp for full audit trail.
+        </div>
+        <div style="overflow-x:auto">
+          <table class="se-table">
+            <thead><tr>
+              <th>Item Name</th><th>Category</th><th>Price</th>
+              <th style="color:var(--cyan)">Branch 1 — Set Stock To</th>
+              <th style="color:var(--red)">Branch 2 — Set Stock To</th>
+              <th>Current Br.1</th><th>Current Br.2</th>
+            </tr></thead>
+            <tbody id="stock-entry-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="tw">
+        <div class="tw-head">
+          <div class="tw-title">Stock Entry Log</div>
+          <select class="fsel" id="stock-log-filter" onchange="renderStockLog()"><option value="">All Dates</option></select>
+        </div>
+        <table>
+          <thead><tr><th>Date</th><th>Item</th><th>Category</th><th style="color:var(--cyan)">Br.1 Set To</th><th style="color:var(--red)">Br.2 Set To</th><th>By</th><th>Saved At</th></tr></thead>
+          <tbody id="stock-log-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- STOCK TRANSFER -->
+    <div class="section" id="tab-transfer">
+      <div style="max-width:680px;margin:0 auto">
+        <div class="tw">
+          <div class="tw-head"><div class="tw-title">🔄 Transfer Stock Between Branches</div></div>
+          <div style="padding:22px">
+            <div class="info-box"><b>Use when:</b> One branch has surplus stock and the other is running low. The quantity is deducted from the source and added to the destination in real-time. A transfer log is saved to Firebase.</div>
+            <div class="form-group">
+              <label>Select Item</label>
+              <select id="tr-item" onchange="updateTransferPreview()"><option value="">— Choose item —</option></select>
+            </div>
+            <div id="tr-preview" style="display:none;margin-bottom:16px">
+              <div class="form-row" style="margin-bottom:12px">
+                <div style="background:rgba(0,229,255,.05);border:1px solid rgba(0,229,255,.15);padding:14px;text-align:center">
+                  <div style="font-size:10px;letter-spacing:2px;color:var(--cyan);text-transform:uppercase;margin-bottom:6px">Branch 1 Stock</div>
+                  <div style="font-family:'Bebas Neue';font-size:36px;color:var(--white)" id="tr-b1-now">—</div>
+                </div>
+                <div style="background:rgba(255,45,85,.05);border:1px solid rgba(255,45,85,.15);padding:14px;text-align:center">
+                  <div style="font-size:10px;letter-spacing:2px;color:var(--red);text-transform:uppercase;margin-bottom:6px">Branch 2 Stock</div>
+                  <div style="font-family:'Bebas Neue';font-size:36px;color:var(--white)" id="tr-b2-now">—</div>
+                </div>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Transfer Direction</label>
+                <select id="tr-from" onchange="updateTransferPreview()">
+                  <option value="b1">Branch 1 → Branch 2</option>
+                  <option value="b2">Branch 2 → Branch 1</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Quantity</label>
+                <input id="tr-qty" type="number" min="1" placeholder="e.g. 10" oninput="updateTransferPreview()">
+              </div>
+            </div>
+            <div id="tr-after" style="display:none;margin-bottom:16px">
+              <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">After Transfer Preview</div>
+              <div class="form-row">
+                <div style="background:rgba(0,229,255,.04);border:1px solid rgba(0,229,255,.1);padding:12px;text-align:center">
+                  <div style="font-size:10px;color:var(--cyan);margin-bottom:4px">Branch 1 Will Have</div>
+                  <div style="font-family:'Bebas Neue';font-size:28px" id="tr-after-b1">—</div>
+                </div>
+                <div style="background:rgba(255,45,85,.04);border:1px solid rgba(255,45,85,.1);padding:12px;text-align:center">
+                  <div style="font-size:10px;color:var(--red);margin-bottom:4px">Branch 2 Will Have</div>
+                  <div style="font-family:'Bebas Neue';font-size:28px" id="tr-after-b2">—</div>
+                </div>
+              </div>
+            </div>
+            <div class="form-group"><label>Reason / Note (optional)</label><input id="tr-note" placeholder="e.g. Low demand at Branch 1 today"></div>
+            <button class="btn btn-purple" style="width:100%;justify-content:center;padding:13px" onclick="executeTransfer()">🔄 Confirm Transfer</button>
+          </div>
+        </div>
+        <div class="tw">
+          <div class="tw-head"><div class="tw-title">Transfer History</div></div>
+          <table>
+            <thead><tr><th>Date & Time</th><th>Item</th><th>Qty</th><th>From</th><th>To</th><th>Note</th></tr></thead>
+            <tbody id="transfer-log-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- INVENTORY -->
+    <div class="section" id="tab-inventory">
+      <div class="tw">
+        <div class="tw-head">
+          <div class="tw-title">Product Inventory</div>
+          <div class="toolbar">
+            <input class="sbox" placeholder="🔍 Search…" id="inv-search" oninput="renderInventory()">
+            <select class="fsel" id="inv-cat" onchange="renderInventory()">
+              <option value="">All Categories</option>
+              <option>Steamed</option><option>Fried</option><option>Crispy</option><option>Tandoori</option><option>Mojito</option>
+            </select>
+            <button class="btn btn-gold" onclick="openProductModal()">+ Add Product</button>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th>Item</th><th>Category</th><th>Price</th><th style="color:var(--cyan)">Stock Br.1</th><th style="color:var(--red)">Stock Br.2</th><th>Alert At</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="inv-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="section" id="tab-history">
+      <div class="tw">
+        <div class="tw-head">
+          <div class="tw-title">Sales History</div>
+          <div class="toolbar">
+            <select class="fsel" id="hist-branch" onchange="renderHistory()"><option value="">All Branches</option><option>Branch 1</option><option>Branch 2</option></select>
+            <input type="date" class="sbox" id="hist-date" style="min-width:150px" onchange="renderHistory()">
+            <button class="btn btn-outline btn-sm" onclick="exportHistoryCSV()">⬇ Export CSV</button>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th>Bill #</th><th>Date & Time</th><th>Branch</th><th>Customer</th><th>Items</th><th>Total</th><th>Status</th><th>Reprint</th></tr></thead>
+          <tbody id="hist-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- REPORTS -->
+    <div class="section" id="tab-reports">
+      <div class="section-title">Reports <span>Generate daily reports for any date</span></div>
+      <div class="tw" style="margin-bottom:20px">
+        <div class="tw-head"><div class="tw-title">Report Settings</div></div>
+        <div style="padding:20px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+          <div><label>Report Date</label><input type="date" class="sbox" id="rep-date" style="min-width:170px"></div>
+          <div><label>Branch</label><select class="fsel" id="rep-branch"><option value="">Both Branches</option><option>Branch 1</option><option>Branch 2</option></select></div>
+          <button class="btn btn-gold" onclick="generateReport()">Generate Report</button>
+        </div>
+      </div>
+      <div id="report-output" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+          <div class="tw">
+            <div class="tw-head"><div class="tw-title" id="rep-sales-title">Sales Summary</div></div>
+            <table><thead><tr><th>Metric</th><th>Branch 1</th><th>Branch 2</th><th>Total</th></tr></thead><tbody id="rep-sales-body"></tbody></table>
+          </div>
+          <div class="tw">
+            <div class="tw-head"><div class="tw-title">Category Breakdown</div></div>
+            <table><thead><tr><th>Category</th><th>Qty Sold</th><th>Revenue</th></tr></thead><tbody id="rep-cat-body"></tbody></table>
+          </div>
+        </div>
+        <div class="tw" style="margin-bottom:20px">
+          <div class="tw-head"><div class="tw-title">Item-wise Sales</div></div>
+          <table><thead><tr><th>Item</th><th>Category</th><th>Qty Br.1</th><th>Qty Br.2</th><th>Total Qty</th><th>Revenue</th></tr></thead><tbody id="rep-items-body"></tbody></table>
+        </div>
+        <div class="tw" style="margin-bottom:20px">
+          <div class="tw-head"><div class="tw-title">Current Stock Snapshot</div></div>
+          <table><thead><tr><th>Item</th><th>Category</th><th>Price</th><th style="color:var(--cyan)">Stock Br.1</th><th style="color:var(--red)">Stock Br.2</th><th>Min Alert</th><th>Status</th></tr></thead><tbody id="rep-stock-body"></tbody></table>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;padding-bottom:10px">
+          <button class="btn btn-green" onclick="exportReportExcel()">📊 Export Excel (.xlsx)</button>
+          <button class="btn btn-outline" onclick="exportReportPDF()">🖨 Export PDF / Print</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADMIN PANEL -->
+    <div class="section" id="tab-adminpanel">
+      <div class="admin-grid-2">
+        <div class="tw">
+          <div class="tw-head"><div class="tw-title">Branch Revenue — Today</div></div>
+          <table><thead><tr><th>Branch</th><th>Orders</th><th>Revenue</th><th>Avg Bill</th></tr></thead><tbody id="admin-branch-rev"></tbody></table>
+        </div>
+        <div class="tw">
+          <div class="tw-head"><div class="tw-title">Top 10 Items — All Time</div></div>
+          <table><thead><tr><th>Rank</th><th>Item</th><th>Qty Sold</th><th>Revenue</th></tr></thead><tbody id="admin-top-items"></tbody></table>
+        </div>
+      </div>
+      <div class="tw">
+        <div class="tw-head"><div class="tw-title">🔐 Change PINs</div></div>
+        <div style="padding:20px;display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+          <div><div class="form-group"><label>Admin PIN (4 digits)</label><input id="new-pin-admin" type="password" maxlength="4" placeholder="••••"></div><button class="btn btn-gold btn-sm" onclick="savePin('admin')">Update Admin PIN</button></div>
+          <div><div class="form-group"><label>Branch 1 PIN (4 digits)</label><input id="new-pin-b1" type="password" maxlength="4" placeholder="••••"></div><button class="btn btn-gold btn-sm" onclick="savePin('b1')">Update Branch 1 PIN</button></div>
+          <div><div class="form-group"><label>Branch 2 PIN (4 digits)</label><input id="new-pin-b2" type="password" maxlength="4" placeholder="••••"></div><button class="btn btn-gold btn-sm" onclick="savePin('b2')">Update Branch 2 PIN</button></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- PRODUCT MODAL -->
+<div class="modal-overlay" id="product-modal">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title" id="pm-title">Add Product</div><button class="modal-close" onclick="closeModal('product-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="pm-id">
+      <div class="form-row">
+        <div class="form-group"><label>Item Name</label><input id="pm-name" placeholder="e.g. Paneer Momos"></div>
+        <div class="form-group"><label>Category</label><select id="pm-cat"><option>Steamed</option><option>Fried</option><option>Crispy</option><option>Tandoori</option><option>Mojito</option></select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Price (₹)</label><input id="pm-price" type="number" min="1" placeholder="90"></div>
+        <div class="form-group"><label>Low-Stock Alert (units)</label><input id="pm-min" type="number" min="1" placeholder="10"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Opening Stock — Branch 1</label><input id="pm-s1" type="number" min="0" placeholder="50"></div>
+        <div class="form-group"><label>Opening Stock — Branch 2</label><input id="pm-s2" type="number" min="0" placeholder="50"></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('product-modal')">Cancel</button><button class="btn btn-gold" onclick="saveProduct()">Save Product</button></div>
+  </div>
+</div>
+
+<!-- BILL PREVIEW MODAL -->
+<div class="modal-overlay" id="bill-modal">
+  <div class="modal" style="width:440px">
+    <div class="modal-head"><div class="modal-title">Bill Preview</div><button class="modal-close" onclick="closeModal('bill-modal')">✕</button></div>
+    <div class="modal-body" id="bill-preview-body"></div>
+    <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('bill-modal')">Close</button><button class="btn btn-gold" onclick="doPrint(printHTML)">🖨 Print</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+
+const firebaseConfig = {
+    apiKey: "AIzaSyCoBxwAL779odAToA_lF3AQmeJxvRxK8LI",
+  authDomain: "insta-momos-pos.firebaseapp.com",
+  projectId: "insta-momos-pos",
+  storageBucket: "insta-momos-pos.firebasestorage.app",
+  messagingSenderId: "777420843138",
+  appId: "1:777420843138:web:23bfaf4ecdefcfd0e5ec9b",
+  measurementId: "G-W94GN6F1WJ"
+};
+
+/* ══ COLLECTIONS (prefixed pos_ to not clash with token project) ══ */
+const C_PROD  = 'pos_products';
+const C_SALE  = 'pos_sales';
+const C_CFG   = 'pos_config';
+const C_SLOG  = 'pos_stock_log';
+const C_TRAN  = 'pos_transfers';
+
+/* ══ DEFAULTS ══ */
+const DEF_PRODUCTS = [
+  {name:'Veg Momos',          cat:'Steamed',  price:70,  stock1:50,stock2:50,minStock:10},
+  {name:'Peri Peri Momos',    cat:'Steamed',  price:80,  stock1:50,stock2:50,minStock:10},
+  {name:'Paneer Momos',       cat:'Steamed',  price:90,  stock1:40,stock2:40,minStock:8},
+  {name:'Veg Fried Momos',    cat:'Fried',    price:90,  stock1:50,stock2:50,minStock:10},
+  {name:'Peri Peri Fried',    cat:'Fried',    price:100, stock1:40,stock2:40,minStock:8},
+  {name:'Paneer Fried Momos', cat:'Fried',    price:110, stock1:35,stock2:35,minStock:8},
+  {name:'Cheese Crispy',      cat:'Crispy',   price:130, stock1:30,stock2:30,minStock:5},
+  {name:'Paneer Crispy',      cat:'Crispy',   price:130, stock1:30,stock2:30,minStock:5},
+  {name:'Paneer Tandoori',    cat:'Tandoori', price:120, stock1:25,stock2:25,minStock:5},
+  {name:'Mint Mojito',        cat:'Mojito',   price:40,  stock1:60,stock2:60,minStock:15},
+  {name:'Blueberry Mojito',   cat:'Mojito',   price:40,  stock1:60,stock2:60,minStock:15},
+  {name:'Strawberry Mojito',  cat:'Mojito',   price:40,  stock1:60,stock2:60,minStock:15},
+  {name:'Green Apple Mojito', cat:'Mojito',   price:40,  stock1:60,stock2:60,minStock:15},
+];
+const DEF_PINS = {admin:'1234',b1:'1111',b2:'2222'};
+
+/* ══ STATE ══ */
+let db, currentRole=null, products=[], sales=[], stockLogs=[], transfers=[], config={};
+let cart=[], selectedCat='All', printHTML='', billCounter=1000;
+let unsubProd=null, unsubSale=null, unsubLog=null, unsubTran=null;
+let reportData=null;
+
+/* ══════════════════════════════════════
+   INIT
+══════════════════════════════════════ */
+async function init(){
+  try{
+    firebase.initializeApp(firebaseConfig);
+    db=firebase.firestore();
+    await db.collection(C_CFG).doc('ping').set({ts:Date.now()});
+    const cfgDoc=await db.collection(C_CFG).doc('settings').get();
+    if(!cfgDoc.exists){
+      await db.collection(C_CFG).doc('settings').set({pins:DEF_PINS,billCounter:1000});
+      config={pins:{...DEF_PINS},billCounter:1000};
+      const batch=db.batch();
+      DEF_PRODUCTS.forEach(p=>batch.set(db.collection(C_PROD).doc(),{...p,createdAt:Date.now()}));
+      await batch.commit();
+      toast('First run — default data seeded!','warn');
+    }else{
+      config=cfgDoc.data();
+      billCounter=config.billCounter||1000;
+    }
+    document.getElementById('loading-screen').style.display='none';
+    document.getElementById('login-screen').style.display='flex';
+  }catch(e){
+    document.querySelector('.spinner').style.display='none';
+    document.querySelector('.loading-text').style.display='none';
+    document.getElementById('loading-err').style.display='block';
+    document.getElementById('loading-err-msg').textContent=e.message;
+  }
+}
+
+/* ══════════════════════════════════════
+   LISTENERS
+══════════════════════════════════════ */
+function startListeners(){
+  unsubProd=db.collection(C_PROD).orderBy('name').onSnapshot(snap=>{
+    products=snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderMenuGrid();renderInventory();renderDashboard();buildTrDropdown();renderStockEntryTable();
+    setSyncBadge(true);
+  },()=>setSyncBadge(false));
+  unsubSale=db.collection(C_SALE).orderBy('ts','desc').limit(500).onSnapshot(snap=>{
+    sales=snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderDashboard();renderHistory();renderAdminPanel();
+  },()=>setSyncBadge(false));
+  unsubLog=db.collection(C_SLOG).orderBy('ts','desc').limit(300).onSnapshot(snap=>{
+    stockLogs=snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderStockLog();populateLogFilter();
+  });
+  unsubTran=db.collection(C_TRAN).orderBy('ts','desc').limit(100).onSnapshot(snap=>{
+    transfers=snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderTransferLog();
+  });
+}
+function stopListeners(){[unsubProd,unsubSale,unsubLog,unsubTran].forEach(u=>u&&u());unsubProd=unsubSale=unsubLog=unsubTran=null}
+
+/* ══ CLOCK ══ */
+setInterval(()=>{const e=document.getElementById('h-clock');if(e)e.textContent=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})},1000);
+
+/* ══════════════════════════════════════
+   PIN
+══════════════════════════════════════ */
+let pinTarget=null,pinBuf='';
+function showPin(role){
+  pinTarget=role;pinBuf='';updateDots();
+  document.getElementById('pin-err').textContent='';
+  const lbl={admin:'Admin Access',b1:'Branch 1 Login',b2:'Branch 2 Login'};
+  document.getElementById('pin-heading').textContent=lbl[role];
+  document.getElementById('pin-overlay').classList.add('open');
+}
+function closePin(){document.getElementById('pin-overlay').classList.remove('open');pinBuf='';updateDots()}
+function pinKey(k){if(pinBuf.length>=4)return;pinBuf+=k;updateDots();if(pinBuf.length===4)setTimeout(checkPin,120)}
+function pinDel(){pinBuf=pinBuf.slice(0,-1);updateDots();document.getElementById('pin-err').textContent=''}
+function updateDots(){for(let i=0;i<4;i++){const d=document.getElementById('pd'+i);d.classList.toggle('fill',i<pinBuf.length);d.classList.remove('shake')}}
+function checkPin(){
+  const ok=String(config.pins?.[pinTarget]||DEF_PINS[pinTarget]);
+  if(pinBuf===ok){closePin();loginAs(pinTarget)}
+  else{
+    document.getElementById('pin-err').textContent='Incorrect PIN — try again';
+    document.querySelectorAll('.pdot').forEach(d=>{d.classList.remove('fill');void d.offsetWidth;d.classList.add('shake')});
+    pinBuf='';setTimeout(updateDots,350);
+  }
+}
+
+/* ══════════════════════════════════════
+   LOGIN / LOGOUT
+══════════════════════════════════════ */
+function loginAs(role){
+  currentRole=role;
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  const hdr=document.getElementById('app-header');
+  const pill=document.getElementById('role-pill');
+  hdr.className='header role-'+role;
+  if(role==='admin'){pill.textContent='ADMIN';pill.className='role-pill admin'}
+  else if(role==='b1'){pill.textContent='BRANCH 1';pill.className='role-pill b1'}
+  else{pill.textContent='BRANCH 2';pill.className='role-pill b2'}
+  document.querySelectorAll('.adm-only').forEach(t=>t.style.display=role==='admin'?'block':'none');
+  document.getElementById('billing-label').textContent=role==='b2'?'Branch 2 — Menu':'Branch 1 — Menu';
+  const today=new Date().toISOString().slice(0,10);
+  ['rep-date','stock-date'].forEach(id=>{const e=document.getElementById(id);if(e&&!e.value)e.value=today});
+  startListeners();
+  switchTab('dashboard',document.querySelector('.tab[data-tab="dashboard"]'));
+}
+function logout(){
+  stopListeners();currentRole=null;cart=[];
+  document.getElementById('app').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelector('.tab[data-tab="dashboard"]').classList.add('active');
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById('tab-dashboard').classList.add('active');
+}
+
+/* ══ TAB ══ */
+function switchTab(tab,el){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  el.classList.add('active');
+}
+
+/* ══ HELPERS ══ */
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open')}));
+function setSyncBadge(ok){const b=document.getElementById('sync-badge');if(!b)return;b.textContent=ok?'● LIVE':'⚠ OFFLINE';b.className='h-sync '+(ok?'live':'off')}
+function toast(msg,type='ok'){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show '+(type==='err'?'err':type==='warn'?'warn':'');clearTimeout(t._t);t._t=setTimeout(()=>t.className='toast',3200)}
+function catBadge(cat){const m={Steamed:'bg-steamed',Fried:'bg-fried',Crispy:'bg-crispy',Tandoori:'bg-tandoori',Mojito:'bg-mojito'};return`<span class="badge ${m[cat]||''}">${cat}</span>`}
+function fmtDate(ts){return new Date(ts).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}
+function isoDate(ts){return new Date(ts).toISOString().slice(0,10)}
+function brKey(){return currentRole==='b2'?'stock2':'stock1'}
+function brLabel(){return currentRole==='b2'?'Branch 2':'Branch 1'}
+
+/* ══════════════════════════════════════
+   DASHBOARD
+══════════════════════════════════════ */
+function renderDashboard(){
+  const today=new Date().toDateString();
+  const ts=sales.filter(s=>{if(!s.ts)return false;const m=new Date(s.ts).toDateString()===today;return currentRole==='admin'?m:m&&s.branch===brLabel()});
+  const rev=ts.reduce((a,s)=>a+s.total,0),orders=ts.length,avg=orders?Math.round(rev/orders):0;
+  document.getElementById('ds-revenue').textContent='₹'+rev;
+  document.getElementById('ds-orders').textContent=orders;
+  document.getElementById('ds-avg').textContent='₹'+avg;
+  document.getElementById('ds-rev-branch').textContent=currentRole==='admin'?'All Branches':brLabel();
+  const ic={};ts.forEach(s=>(s.items||[]).forEach(i=>{ic[i.name]=(ic[i.name]||0)+i.qty}));
+  const top=Object.entries(ic).sort((a,b)=>b[1]-a[1])[0];
+  document.getElementById('ds-top').textContent=top?top[0].split(' ').slice(0,3).join(' '):'—';
+  const cm={};ts.forEach(s=>(s.items||[]).forEach(i=>{if(!cm[i.cat])cm[i.cat]={qty:0,rev:0};cm[i.cat].qty+=i.qty;cm[i.cat].rev+=i.price*i.qty}));
+  document.getElementById('dash-cats').innerHTML=Object.keys(cm).length
+    ?Object.entries(cm).sort((a,b)=>b[1].rev-a[1].rev).map(([c,d])=>`<tr><td>${catBadge(c)}</td><td>${d.qty}</td><td class="c-gold fw7">₹${d.rev}</td></tr>`).join('')
+    :`<tr><td colspan="3" class="empty-row">No sales today</td></tr>`;
+  const bk=brKey();const low=[];
+  products.forEach(p=>{
+    if(currentRole==='admin'){if(p.stock1<=p.minStock)low.push({...p,bl:'Branch 1',st:p.stock1});if(p.stock2<=p.minStock)low.push({...p,bl:'Branch 2',st:p.stock2})}
+    else{if(p[bk]<=p.minStock)low.push({...p,bl:brLabel(),st:p[bk]})}
+  });
+  document.getElementById('dash-stock').innerHTML=low.length
+    ?low.map(p=>`<tr><td class="fw7">${p.name}</td><td>${p.bl==='Branch 1'?'<span class="badge badge-b1">Br.1</span>':'<span class="badge badge-b2">Br.2</span>'}</td><td class="c-low">${p.st}</td><td><span class="badge badge-low">LOW</span></td></tr>`).join('')
+    :`<tr><td colspan="4" class="empty-row" style="color:var(--green)">✓ All stocks OK</td></tr>`;
+}
+
+/* ══════════════════════════════════════
+   BILLING
+══════════════════════════════════════ */
+const CATS=['All','Steamed','Fried','Crispy','Tandoori','Mojito'];
+function renderMenuGrid(){
+  document.getElementById('cat-filters').innerHTML=CATS.map(c=>`<button class="cf${selectedCat===c?' active':''}" onclick="selectCat('${c}')">${c}</button>`).join('');
+  filterMenu();
+}
+function selectCat(cat){selectedCat=cat;renderMenuGrid()}
+function filterMenu(){
+  const q=(document.getElementById('menu-search')||{}).value?.toLowerCase()||'';
+  const bk=brKey();
+  const filtered=products.filter(p=>(selectedCat==='All'||p.cat===selectedCat)&&(!q||p.name.toLowerCase().includes(q)));
+  const grid=document.getElementById('menu-grid');if(!grid)return;
+  grid.innerHTML=filtered.length?filtered.map(p=>{
+    const st=p[bk]??0,oos=st<=0,lo=!oos&&st<=p.minStock;
+    return`<div class="menu-card${oos?' oos':''}" onclick="${oos?'':'addToCart(\''+p.id+'\')'}">
+      ${catBadge(p.cat)}<div class="mc-name">${p.name}</div>
+      <div class="mc-price">₹${p.price}</div>
+      <div class="mc-stock" style="color:${oos?'var(--red)':lo?'var(--gold)':'var(--muted2)'}">
+        ${oos?'Out of stock':'Stock: '+st+(lo?' ⚠':'')}
+      </div></div>`;
+  }).join(''):`<div class="c-muted" style="padding:20px">No items found</div>`;
+}
+function addToCart(pid){
+  const p=products.find(x=>x.id===pid);if(!p)return;
+  const bk=brKey();if((p[bk]||0)<=0){toast('Out of stock!','err');return}
+  const ci=cart.find(c=>c.id===pid);
+  if(ci){if(ci.qty>=(p[bk]||0)){toast('Max stock reached!','err');return}ci.qty++}
+  else cart.push({id:pid,name:p.name,cat:p.cat,price:p.price,qty:1});
+  renderCart();
+}
+function changeQty(i,d){cart[i].qty+=d;if(cart[i].qty<=0)cart.splice(i,1);renderCart()}
+function clearCart(){cart=[];renderCart()}
+function renderCart(){
+  const body=document.getElementById('cart-body');if(!body)return;
+  if(!cart.length){
+    body.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted2);font-size:13px">Add items from the menu</div>';
+    ['c-sub','c-gst','c-total'].forEach(id=>document.getElementById(id).textContent='₹0');
+    return;
+  }
+  body.innerHTML=cart.map((ci,i)=>`<div class="cart-item">
+    <div class="ci-info"><div class="ci-name">${ci.name}</div><div class="ci-unit">₹${ci.price} each</div></div>
+    <div class="qty-c"><button class="qb" onclick="changeQty(${i},-1)">−</button><div class="qn">${ci.qty}</div><button class="qb" onclick="changeQty(${i},1)">+</button></div>
+    <div class="ci-price">₹${ci.price*ci.qty}</div></div>`).join('');
+  const sub=cart.reduce((a,c)=>a+c.price*c.qty,0),gst=Math.round(sub*.05);
+  document.getElementById('c-sub').textContent='₹'+sub;
+  document.getElementById('c-gst').textContent='₹'+gst;
+  document.getElementById('c-total').textContent='₹'+(sub+gst);
+}
+
+/* ══ BILL ══ */
+function buildBillHTML(billNo,ts){
+  const cName=document.getElementById('cust-name').value||'Walk-in Customer';
+  const cPhone=document.getElementById('cust-phone').value;
+  const sub=cart.reduce((a,c)=>a+c.price*c.qty,0),gst=Math.round(sub*.05),total=sub+gst;
+  const dt=ts?fmtDate(ts):new Date().toLocaleString('en-IN');
+  return`<div style="font-family:Georgia,serif;color:#111;max-width:360px;margin:0 auto">
+    <div style="text-align:center;margin-bottom:14px">
+      <div style="font-size:32px;font-weight:700;color:#cc0000;letter-spacing:2px">INSTA MOMOS</div>
+      <div style="font-size:11px;letter-spacing:4px;color:#777">...DIP · BITE · ENJOY...</div>
+      <div style="font-size:12px;color:#555;margin-top:4px">${brLabel()} | @instamomos</div>
+      <div style="font-size:11px;color:#888">📞 +91 94452 36096 / +91 90038 43490</div>
+    </div>
+    <hr style="border:none;border-top:2px dashed #ccc;margin:10px 0">
+    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><b>Bill # ${billNo||'PREVIEW'}</b><span>${dt}</span></div>
+    <div style="font-size:12px">Customer: <b>${cName}</b>${cPhone?' | '+cPhone:''}</div>
+    <hr style="border:none;border-top:2px dashed #ccc;margin:10px 0">
+    <table style="width:100%;font-size:13px;border-collapse:collapse">
+      <thead><tr style="border-bottom:1px solid #ddd"><th style="text-align:left;padding:4px 0">Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Amount</th></tr></thead>
+      <tbody>${cart.map(ci=>`<tr><td style="padding:5px 0">${ci.name}</td><td style="text-align:center">×${ci.qty}</td><td style="text-align:right">₹${ci.price*ci.qty}</td></tr>`).join('')}</tbody>
+    </table>
+    <hr style="border:none;border-top:2px dashed #ccc;margin:10px 0">
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span>Subtotal</span><span>₹${sub}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px"><span>GST (5%)</span><span>₹${gst}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:700;border-top:2px solid #111;padding-top:8px"><span>TOTAL</span><span>₹${total}</span></div>
+    <hr style="border:none;border-top:2px dashed #ccc;margin:12px 0">
+    <div style="text-align:center;font-size:11px;color:#888;line-height:1.7">Thank you for visiting! 🙏<br>academictechnexus.com | @instamomos</div>
+  </div>`;
+}
+function doPrint(html){const w=window.open('','_blank','width=480,height=720');w.document.write(`<!DOCTYPE html><html><head><style>body{margin:0;padding:20px;background:#fff;font-family:Georgia,serif}</style></head><body>${html}</body></html>`);w.document.close();w.focus();setTimeout(()=>{w.print();w.close()},400)}
+function previewBill(){if(!cart.length){toast('Cart is empty!','err');return}printHTML=buildBillHTML();document.getElementById('bill-preview-body').innerHTML=printHTML;openModal('bill-modal')}
+async function finalizeBill(){
+  if(!cart.length){toast('Cart is empty!','err');return}
+  const sub=cart.reduce((a,c)=>a+c.price*c.qty,0),gst=Math.round(sub*.05),total=sub+gst;
+  const bk=brKey(),now=Date.now();billCounter++;
+  const batch=db.batch();
+  cart.forEach(ci=>{const p=products.find(x=>x.id===ci.id);if(!p)return;const u={};u[bk]=Math.max(0,(p[bk]||0)-ci.qty);batch.update(db.collection(C_PROD).doc(ci.id),u)});
+  const sRef=db.collection(C_SALE).doc();
+  batch.set(sRef,{billNo:billCounter,ts:now,branch:brLabel(),customer:document.getElementById('cust-name').value||'Walk-in',phone:document.getElementById('cust-phone').value||'',items:cart.map(ci=>({name:ci.name,cat:ci.cat,price:ci.price,qty:ci.qty})),sub,gst,total,status:'Paid'});
+  batch.update(db.collection(C_CFG).doc('settings'),{billCounter});
+  try{
+    await batch.commit();
+    printHTML=buildBillHTML(billCounter,now);doPrint(printHTML);
+    cart=[];document.getElementById('cust-name').value='';document.getElementById('cust-phone').value='';
+    renderCart();closeModal('bill-modal');toast(`✓ Bill #${billCounter} saved! ₹${total}`);
+  }catch(e){toast('Save failed: '+e.message,'err')}
+}
+
+/* ══════════════════════════════════════
+   STOCK ENTRY
+══════════════════════════════════════ */
+function renderStockEntryTable(){
+  const body=document.getElementById('stock-entry-body');if(!body)return;
+  body.innerHTML=products.map(p=>`<tr>
+    <td class="fw7">${p.name}</td><td>${catBadge(p.cat)}</td><td class="c-gold">₹${p.price}</td>
+    <td><input type="number" min="0" placeholder="Set to…" id="se1-${p.id}"></td>
+    <td><input type="number" min="0" placeholder="Set to…" id="se2-${p.id}"></td>
+    <td style="color:var(--cyan)">${p.stock1}</td>
+    <td style="color:var(--red)">${p.stock2}</td>
+  </tr>`).join('');
+}
+async function saveStockEntry(){
+  const date=document.getElementById('stock-date').value;
+  if(!date){toast('Select a date first!','err');return}
+  const updates=[];
+  products.forEach(p=>{
+    const v1=document.getElementById('se1-'+p.id)?.value;
+    const v2=document.getElementById('se2-'+p.id)?.value;
+    const n1=v1!==''&&v1!==undefined&&v1!==null?parseInt(v1):null;
+    const n2=v2!==''&&v2!==undefined&&v2!==null?parseInt(v2):null;
+    if(n1!==null||n2!==null)updates.push({p,n1,n2});
+  });
+  if(!updates.length){toast('No values entered — type stock amounts first','warn');return}
+  const batch=db.batch();
+  updates.forEach(({p,n1,n2})=>{
+    const upd={};if(n1!==null)upd.stock1=n1;if(n2!==null)upd.stock2=n2;
+    batch.update(db.collection(C_PROD).doc(p.id),upd);
+    batch.set(db.collection(C_SLOG).doc(),{date,ts:Date.now(),productId:p.id,productName:p.name,cat:p.cat,stock1Set:n1!==null?n1:'—',stock2Set:n2!==null?n2:'—',enteredBy:'Admin'});
+  });
+  try{await batch.commit();toast(`✓ Stock updated for ${updates.length} item(s) on ${date}`);renderStockEntryTable()}
+  catch(e){toast('Error: '+e.message,'err')}
+}
+function renderStockLog(){
+  const f=document.getElementById('stock-log-filter')?.value||'';
+  const filtered=f?stockLogs.filter(l=>l.date===f):stockLogs;
+  const body=document.getElementById('stock-log-body');if(!body)return;
+  body.innerHTML=filtered.length
+    ?filtered.map(l=>`<tr><td>${l.date}</td><td class="fw7">${l.productName}</td><td>${catBadge(l.cat)}</td><td style="color:var(--cyan)">${l.stock1Set}</td><td style="color:var(--red)">${l.stock2Set}</td><td class="c-muted">${l.enteredBy||'Admin'}</td><td style="font-size:11px;color:var(--muted2)">${fmtDate(l.ts)}</td></tr>`).join('')
+    :`<tr><td colspan="7" class="empty-row">No stock entries yet</td></tr>`;
+}
+function populateLogFilter(){
+  const sel=document.getElementById('stock-log-filter');if(!sel)return;
+  const dates=[...new Set(stockLogs.map(l=>l.date))].sort().reverse();
+  const cur=sel.value;
+  sel.innerHTML='<option value="">All Dates</option>'+dates.map(d=>`<option value="${d}"${d===cur?' selected':''}>${d}</option>`).join('');
+}
+
+/* ══════════════════════════════════════
+   STOCK TRANSFER
+══════════════════════════════════════ */
+function buildTrDropdown(){
+  const sel=document.getElementById('tr-item');if(!sel)return;
+  const cur=sel.value;
+  sel.innerHTML='<option value="">— Choose item —</option>'+products.map(p=>`<option value="${p.id}"${p.id===cur?' selected':''}>${p.name} (Br1: ${p.stock1} | Br2: ${p.stock2})</option>`).join('');
+  updateTransferPreview();
+}
+function updateTransferPreview(){
+  const pid=document.getElementById('tr-item')?.value;
+  const p=products.find(x=>x.id===pid);
+  const prev=document.getElementById('tr-preview'),after=document.getElementById('tr-after');
+  if(!p||!prev){prev&&(prev.style.display='none');after&&(after.style.display='none');return}
+  prev.style.display='block';
+  document.getElementById('tr-b1-now').textContent=p.stock1;
+  document.getElementById('tr-b2-now').textContent=p.stock2;
+  const qty=parseInt(document.getElementById('tr-qty')?.value)||0;
+  const from=document.getElementById('tr-from')?.value||'b1';
+  if(qty>0){
+    after.style.display='block';
+    let a1=p.stock1,a2=p.stock2;
+    if(from==='b1'){a1-=qty;a2+=qty}else{a2-=qty;a1+=qty}
+    document.getElementById('tr-after-b1').textContent=a1;
+    document.getElementById('tr-after-b2').textContent=a2;
+    document.getElementById('tr-after-b1').style.color=a1<0?'var(--red)':'var(--white)';
+    document.getElementById('tr-after-b2').style.color=a2<0?'var(--red)':'var(--white)';
+  }else{after.style.display='none'}
+}
+async function executeTransfer(){
+  const pid=document.getElementById('tr-item').value;
+  const qty=parseInt(document.getElementById('tr-qty').value)||0;
+  const from=document.getElementById('tr-from').value;
+  const note=document.getElementById('tr-note').value.trim();
+  const p=products.find(x=>x.id===pid);
+  if(!p){toast('Select an item first','err');return}
+  if(qty<=0){toast('Enter a valid quantity','err');return}
+  const srcStock=from==='b1'?p.stock1:p.stock2;
+  if(qty>srcStock){toast(`Only ${srcStock} units available in ${from==='b1'?'Branch 1':'Branch 2'}!`,'err');return}
+  const newS1=from==='b1'?p.stock1-qty:p.stock1+qty;
+  const newS2=from==='b2'?p.stock2-qty:p.stock2+qty;
+  const batch=db.batch();
+  batch.update(db.collection(C_PROD).doc(pid),{stock1:newS1,stock2:newS2});
+  batch.set(db.collection(C_TRAN).doc(),{ts:Date.now(),productId:pid,productName:p.name,cat:p.cat,qty,from:from==='b1'?'Branch 1':'Branch 2',to:from==='b1'?'Branch 2':'Branch 1',prevS1:p.stock1,prevS2:p.stock2,newS1,newS2,note:note||'—',by:'Admin'});
+  try{
+    await batch.commit();
+    toast(`✓ ${qty} unit(s) of "${p.name}" transferred ${from==='b1'?'Branch 1 → Branch 2':'Branch 2 → Branch 1'}`);
+    document.getElementById('tr-qty').value='';document.getElementById('tr-note').value='';
+    document.getElementById('tr-after').style.display='none';
+  }catch(e){toast('Transfer failed: '+e.message,'err')}
+}
+function renderTransferLog(){
+  const body=document.getElementById('transfer-log-body');if(!body)return;
+  body.innerHTML=transfers.length
+    ?transfers.map(t=>`<tr>
+        <td style="font-size:11px">${fmtDate(t.ts)}</td>
+        <td class="fw7">${t.productName}</td>
+        <td class="c-gold">${t.qty} units</td>
+        <td><span class="badge badge-${t.from==='Branch 1'?'b1':'b2'}">${t.from}</span></td>
+        <td><span class="badge badge-${t.to==='Branch 1'?'b1':'b2'}">${t.to}</span></td>
+        <td style="font-size:12px;color:var(--muted2)">${t.note}</td>
+      </tr>`).join('')
+    :`<tr><td colspan="6" class="empty-row">No transfers yet</td></tr>`;
+}
+
+/* ══════════════════════════════════════
+   INVENTORY
+══════════════════════════════════════ */
+function renderInventory(){
+  const q=document.getElementById('inv-search')?.value?.toLowerCase()||'';
+  const cat=document.getElementById('inv-cat')?.value||'';
+  const filtered=products.filter(p=>(!cat||p.cat===cat)&&(!q||p.name.toLowerCase().includes(q)));
+  const body=document.getElementById('inv-body');if(!body)return;
+  body.innerHTML=filtered.length
+    ?filtered.map(p=>{const l1=p.stock1<=p.minStock,l2=p.stock2<=p.minStock;return`<tr>
+        <td class="fw7">${p.name}</td><td>${catBadge(p.cat)}</td><td class="c-gold">₹${p.price}</td>
+        <td class="${l1?'c-low':'c-ok'}">${p.stock1}${l1?' ⚠':''}</td>
+        <td class="${l2?'c-low':'c-ok'}">${p.stock2}${l2?' ⚠':''}</td>
+        <td class="c-muted">${p.minStock}</td>
+        <td>${(l1||l2)?'<span class="badge badge-low">LOW</span>':'<span class="badge badge-ok">OK</span>'}</td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-outline btn-sm" onclick="openProductModal('${p.id}')">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteProduct('${p.id}','${p.name}')">Delete</button>
+        </td></tr>`;}).join('')
+    :`<tr><td colspan="8" class="empty-row">No products found</td></tr>`;
+}
+function openProductModal(id=''){
+  document.getElementById('pm-id').value=id;
+  if(id){
+    const p=products.find(x=>x.id===id);if(!p)return;
+    document.getElementById('pm-title').textContent='Edit Product';
+    document.getElementById('pm-name').value=p.name;document.getElementById('pm-cat').value=p.cat;
+    document.getElementById('pm-price').value=p.price;document.getElementById('pm-min').value=p.minStock;
+    document.getElementById('pm-s1').value=p.stock1;document.getElementById('pm-s2').value=p.stock2;
+  }else{
+    document.getElementById('pm-title').textContent='Add Product';
+    ['pm-name','pm-price','pm-min','pm-s1','pm-s2'].forEach(i=>document.getElementById(i).value='');
+    document.getElementById('pm-cat').value='Steamed';
+  }
+  openModal('product-modal');
+}
+async function saveProduct(){
+  const id=document.getElementById('pm-id').value;
+  const name=document.getElementById('pm-name').value.trim();
+  const cat=document.getElementById('pm-cat').value;
+  const price=parseInt(document.getElementById('pm-price').value)||0;
+  const minStock=parseInt(document.getElementById('pm-min').value)||10;
+  const stock1=parseInt(document.getElementById('pm-s1').value)||0;
+  const stock2=parseInt(document.getElementById('pm-s2').value)||0;
+  if(!name||!price){toast('Name and Price required!','err');return}
+  try{
+    if(id){await db.collection(C_PROD).doc(id).update({name,cat,price,stock1,stock2,minStock});toast('Product updated!')}
+    else{await db.collection(C_PROD).doc().set({name,cat,price,stock1,stock2,minStock,createdAt:Date.now()});toast('Product added!')}
+    closeModal('product-modal');
+  }catch(e){toast('Error: '+e.message,'err')}
+}
+async function deleteProduct(id,name){
+  if(!confirm(`Delete "${name}"? Cannot be undone.`))return;
+  try{await db.collection(C_PROD).doc(id).delete();toast(`"${name}" deleted`)}
+  catch(e){toast('Error: '+e.message,'err')}
+}
+
+/* ══════════════════════════════════════
+   HISTORY
+══════════════════════════════════════ */
+function renderHistory(){
+  const bf=document.getElementById('hist-branch')?.value||'';
+  const df=document.getElementById('hist-date')?.value||'';
+  const filtered=sales.filter(s=>(!bf||s.branch===bf)&&(!df||(s.ts&&isoDate(s.ts)===df)));
+  const body=document.getElementById('hist-body');if(!body)return;
+  body.innerHTML=filtered.length
+    ?filtered.map(s=>`<tr>
+        <td style="font-family:'Space Mono';font-size:11px;color:var(--gold)">#${s.billNo||s.id.slice(-5)}</td>
+        <td style="font-size:12px">${fmtDate(s.ts)}</td>
+        <td>${s.branch==='Branch 1'?'<span class="badge badge-b1">Br.1</span>':'<span class="badge badge-b2">Br.2</span>'}</td>
+        <td>${s.customer||'—'}<br><span style="font-size:11px;color:var(--muted2)">${s.phone||''}</span></td>
+        <td style="font-size:11px;color:var(--muted2);max-width:180px">${(s.items||[]).map(i=>i.name+'×'+i.qty).join(', ')}</td>
+        <td class="c-gold fw7" style="font-size:15px">₹${s.total}</td>
+        <td><span class="badge badge-paid">Paid</span></td>
+        <td><button class="btn btn-outline btn-sm" onclick="reprintSale('${s.id}')">Reprint</button></td>
+      </tr>`).join('')
+    :`<tr><td colspan="8" class="empty-row">No sales found</td></tr>`;
+}
+function reprintSale(sid){
+  const s=sales.find(x=>x.id===sid);if(!s)return;
+  const oldCart=[...cart],oldN=document.getElementById('cust-name').value,oldP=document.getElementById('cust-phone').value;
+  cart=(s.items||[]).map(i=>({id:'',name:i.name,cat:i.cat,price:i.price,qty:i.qty}));
+  document.getElementById('cust-name').value=s.customer||'';document.getElementById('cust-phone').value=s.phone||'';
+  const html=buildBillHTML(s.billNo||s.id.slice(-5),s.ts);
+  cart=oldCart;document.getElementById('cust-name').value=oldN;document.getElementById('cust-phone').value=oldP;
+  doPrint(html);
+}
+function exportHistoryCSV(){
+  const bf=document.getElementById('hist-branch')?.value||'';
+  const df=document.getElementById('hist-date')?.value||'';
+  const filtered=sales.filter(s=>(!bf||s.branch===bf)&&(!df||(s.ts&&isoDate(s.ts)===df)));
+  if(!filtered.length){toast('No data to export','warn');return}
+  const rows=[['Bill#','Date','Branch','Customer','Phone','Items','Subtotal','GST','Total']];
+  filtered.forEach(s=>rows.push([s.billNo||'',fmtDate(s.ts),s.branch,s.customer,s.phone||'',(s.items||[]).map(i=>i.name+'×'+i.qty).join('; '),s.sub,s.gst,s.total]));
+  const csv=rows.map(r=>r.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);a.download=`instamomos-sales-${new Date().toISOString().slice(0,10)}.csv`;a.click();toast('CSV exported!');
+}
+
+/* ══════════════════════════════════════
+   REPORTS
+══════════════════════════════════════ */
+function generateReport(){
+  const date=document.getElementById('rep-date').value;
+  const branch=document.getElementById('rep-branch').value;
+  if(!date){toast('Select a report date','err');return}
+  const daySales=sales.filter(s=>s.ts&&isoDate(s.ts)===date&&(!branch||s.branch===branch));
+  const brMap={'Branch 1':{orders:0,rev:0,sub:0,gst:0},'Branch 2':{orders:0,rev:0,sub:0,gst:0}};
+  daySales.forEach(s=>{const b=brMap[s.branch]||(brMap[s.branch]={orders:0,rev:0,sub:0,gst:0});b.orders++;b.rev+=s.total;b.sub+=s.sub;b.gst+=s.gst});
+  const tRev=Object.values(brMap).reduce((a,b)=>a+b.rev,0),tOrd=Object.values(brMap).reduce((a,b)=>a+b.orders,0);
+  document.getElementById('rep-sales-title').textContent=`Sales Summary — ${date}${branch?' ('+branch+')':''}`;
+  document.getElementById('rep-sales-body').innerHTML=`
+    <tr><td class="fw7">Orders</td><td>${brMap['Branch 1'].orders}</td><td>${brMap['Branch 2'].orders}</td><td class="c-gold fw7">${tOrd}</td></tr>
+    <tr><td class="fw7">Subtotal</td><td>₹${brMap['Branch 1'].sub}</td><td>₹${brMap['Branch 2'].sub}</td><td class="c-gold fw7">₹${brMap['Branch 1'].sub+brMap['Branch 2'].sub}</td></tr>
+    <tr><td class="fw7">GST (5%)</td><td>₹${brMap['Branch 1'].gst}</td><td>₹${brMap['Branch 2'].gst}</td><td class="c-gold fw7">₹${brMap['Branch 1'].gst+brMap['Branch 2'].gst}</td></tr>
+    <tr><td class="fw7">Revenue</td><td>₹${brMap['Branch 1'].rev}</td><td>₹${brMap['Branch 2'].rev}</td><td class="c-gold fw7" style="font-size:15px">₹${tRev}</td></tr>
+    <tr><td class="fw7">Avg Bill</td><td>₹${brMap['Branch 1'].orders?Math.round(brMap['Branch 1'].rev/brMap['Branch 1'].orders):0}</td><td>₹${brMap['Branch 2'].orders?Math.round(brMap['Branch 2'].rev/brMap['Branch 2'].orders):0}</td><td class="c-gold fw7">₹${tOrd?Math.round(tRev/tOrd):0}</td></tr>`;
+  const catMap={};
+  daySales.forEach(s=>(s.items||[]).forEach(i=>{if(!catMap[i.cat])catMap[i.cat]={qty:0,rev:0};catMap[i.cat].qty+=i.qty;catMap[i.cat].rev+=i.price*i.qty}));
+  document.getElementById('rep-cat-body').innerHTML=Object.keys(catMap).length
+    ?Object.entries(catMap).sort((a,b)=>b[1].rev-a[1].rev).map(([c,d])=>`<tr><td>${catBadge(c)}</td><td>${d.qty}</td><td class="c-gold fw7">₹${d.rev}</td></tr>`).join('')
+    :`<tr><td colspan="3" class="empty-row">No sales on this date</td></tr>`;
+  const itemMap={};
+  daySales.forEach(s=>(s.items||[]).forEach(i=>{if(!itemMap[i.name])itemMap[i.name]={cat:i.cat,price:i.price,b1:0,b2:0};if(s.branch==='Branch 1')itemMap[i.name].b1+=i.qty;else itemMap[i.name].b2+=i.qty}));
+  document.getElementById('rep-items-body').innerHTML=Object.keys(itemMap).length
+    ?Object.entries(itemMap).sort((a,b)=>(b[1].b1+b[1].b2)-(a[1].b1+a[1].b2)).map(([n,d])=>`<tr><td class="fw7">${n}</td><td>${catBadge(d.cat)}</td><td style="color:var(--cyan)">${d.b1}</td><td style="color:var(--red)">${d.b2}</td><td class="fw7">${d.b1+d.b2}</td><td class="c-gold fw7">₹${(d.b1+d.b2)*d.price}</td></tr>`).join('')
+    :`<tr><td colspan="6" class="empty-row">No items sold</td></tr>`;
+  document.getElementById('rep-stock-body').innerHTML=products.map(p=>{const l1=p.stock1<=p.minStock,l2=p.stock2<=p.minStock;return`<tr><td class="fw7">${p.name}</td><td>${catBadge(p.cat)}</td><td class="c-gold">₹${p.price}</td><td class="${l1?'c-low':'c-ok'}">${p.stock1}${l1?' ⚠':''}</td><td class="${l2?'c-low':'c-ok'}">${p.stock2}${l2?' ⚠':''}</td><td class="c-muted">${p.minStock}</td><td>${(l1||l2)?'<span class="badge badge-low">LOW</span>':'<span class="badge badge-ok">OK</span>'}</td></tr>`}).join('');
+  reportData={date,branch:branch||'All Branches',brMap,catMap,itemMap,daySales};
+  document.getElementById('report-output').style.display='block';
+  toast('Report generated!');
+}
+
+function exportReportExcel(){
+  if(!reportData){toast('Generate a report first','warn');return}
+  const {date,branch,brMap,catMap,itemMap,daySales}=reportData;
+  const wb=XLSX.utils.book_new();
+  // Sheet 1 — Summary
+  const s1=[['INSTA MOMOS — Daily Sales Report'],[`Date: ${date}  |  Branch: ${branch}`],[],
+    ['Metric','Branch 1','Branch 2','Total'],
+    ['Orders',brMap['Branch 1'].orders,brMap['Branch 2'].orders,brMap['Branch 1'].orders+brMap['Branch 2'].orders],
+    ['Subtotal (₹)',brMap['Branch 1'].sub,brMap['Branch 2'].sub,brMap['Branch 1'].sub+brMap['Branch 2'].sub],
+    ['GST 5% (₹)',brMap['Branch 1'].gst,brMap['Branch 2'].gst,brMap['Branch 1'].gst+brMap['Branch 2'].gst],
+    ['Revenue (₹)',brMap['Branch 1'].rev,brMap['Branch 2'].rev,brMap['Branch 1'].rev+brMap['Branch 2'].rev],
+    ['Avg Bill (₹)',brMap['Branch 1'].orders?Math.round(brMap['Branch 1'].rev/brMap['Branch 1'].orders):0,brMap['Branch 2'].orders?Math.round(brMap['Branch 2'].rev/brMap['Branch 2'].orders):0,0],
+    [],[`Category Breakdown`],['Category','Qty Sold','Revenue (₹)'],
+    ...Object.entries(catMap).map(([c,d])=>[c,d.qty,d.rev])];
+  const ws1=XLSX.utils.aoa_to_sheet(s1);ws1['!cols']=[{wch:22},{wch:14},{wch:14},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws1,'Sales Summary');
+  // Sheet 2 — Items
+  const s2=[['Item-wise Sales'],[`Date: ${date}`],[],
+    ['Item Name','Category','Qty Br.1','Qty Br.2','Total Qty','Price (₹)','Revenue (₹)'],
+    ...Object.entries(itemMap).sort((a,b)=>(b[1].b1+b[1].b2)-(a[1].b1+a[1].b2)).map(([n,d])=>[n,d.cat,d.b1,d.b2,d.b1+d.b2,d.price,(d.b1+d.b2)*d.price])];
+  const ws2=XLSX.utils.aoa_to_sheet(s2);ws2['!cols']=[{wch:26},{wch:12},{wch:11},{wch:11},{wch:11},{wch:11},{wch:13}];
+  XLSX.utils.book_append_sheet(wb,ws2,'Item Sales');
+  // Sheet 3 — Stock
+  const s3=[['Current Stock Snapshot'],[`Generated: ${new Date().toLocaleString('en-IN')}`],[],
+    ['Item Name','Category','Price (₹)','Stock Br.1','Stock Br.2','Min Alert','Status'],
+    ...products.map(p=>[p.name,p.cat,p.price,p.stock1,p.stock2,p.minStock,(p.stock1<=p.minStock||p.stock2<=p.minStock)?'LOW STOCK':'OK'])];
+  const ws3=XLSX.utils.aoa_to_sheet(s3);ws3['!cols']=[{wch:26},{wch:12},{wch:10},{wch:12},{wch:12},{wch:11},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,ws3,'Stock Snapshot');
+  // Sheet 4 — Bills
+  const s4=[['All Bills'],[`Date: ${date}  |  Branch: ${branch}`],[],
+    ['Bill #','Date Time','Branch','Customer','Phone','Items','Subtotal','GST','Total'],
+    ...daySales.map(s=>[s.billNo||'',fmtDate(s.ts),s.branch,s.customer,s.phone||'',(s.items||[]).map(i=>i.name+'×'+i.qty).join('; '),s.sub,s.gst,s.total])];
+  const ws4=XLSX.utils.aoa_to_sheet(s4);ws4['!cols']=[{wch:8},{wch:20},{wch:10},{wch:18},{wch:14},{wch:40},{wch:10},{wch:8},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws4,'Bills');
+  // Sheet 5 — Transfers
+  const s5=[['Stock Transfers Log'],[],['Date Time','Item','Category','Qty','From','To','Note'],
+    ...transfers.map(t=>[fmtDate(t.ts),t.productName,t.cat,t.qty,t.from,t.to,t.note])];
+  const ws5=XLSX.utils.aoa_to_sheet(s5);ws5['!cols']=[{wch:20},{wch:26},{wch:12},{wch:8},{wch:10},{wch:10},{wch:30}];
+  XLSX.utils.book_append_sheet(wb,ws5,'Transfers');
+  XLSX.writeFile(wb,`InstaM omos-Report-${date}.xlsx`);
+  toast('Excel report downloaded!');
+}
+
+function exportReportPDF(){
+  if(!reportData){toast('Generate a report first','warn');return}
+  const {date,branch,brMap,catMap,itemMap}=reportData;
+  const tRev=brMap['Branch 1'].rev+brMap['Branch 2'].rev,tOrd=brMap['Branch 1'].orders+brMap['Branch 2'].orders;
+  const html=`<!DOCTYPE html><html><head><style>
+    body{font-family:Arial,sans-serif;color:#111;padding:28px;font-size:13px}
+    h1{font-size:24px;color:#cc0000;letter-spacing:2px;margin-bottom:2px}
+    h2{font-size:14px;color:#555;font-weight:400;margin-bottom:20px}
+    h3{font-size:13px;color:#333;margin:20px 0 8px;border-bottom:2px solid #eee;padding-bottom:4px;text-transform:uppercase;letter-spacing:1px}
+    table{width:100%;border-collapse:collapse;margin-bottom:18px;font-size:12px}
+    th{background:#f5c518;color:#000;padding:7px 10px;text-align:left;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:1px}
+    td{padding:6px 10px;border-bottom:1px solid #eee}
+    tr:nth-child(even) td{background:#fafafa}
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+    .footer{text-align:center;font-size:10px;color:#aaa;margin-top:24px;border-top:1px solid #eee;padding-top:10px}
+    @media print{.no-print{display:none}}
+  </style></head><body>
+  <h1>INSTA MOMOS</h1><h2>Daily Report — ${date} | ${branch}</h2>
+  <h3>Sales Summary</h3>
+  <table><thead><tr><th>Metric</th><th>Branch 1</th><th>Branch 2</th><th>Total</th></tr></thead><tbody>
+    <tr><td>Orders</td><td>${brMap['Branch 1'].orders}</td><td>${brMap['Branch 2'].orders}</td><td><b>${tOrd}</b></td></tr>
+    <tr><td>Subtotal</td><td>₹${brMap['Branch 1'].sub}</td><td>₹${brMap['Branch 2'].sub}</td><td><b>₹${brMap['Branch 1'].sub+brMap['Branch 2'].sub}</b></td></tr>
+    <tr><td>GST (5%)</td><td>₹${brMap['Branch 1'].gst}</td><td>₹${brMap['Branch 2'].gst}</td><td><b>₹${brMap['Branch 1'].gst+brMap['Branch 2'].gst}</b></td></tr>
+    <tr style="background:#fff8e7"><td><b>Revenue</b></td><td><b>₹${brMap['Branch 1'].rev}</b></td><td><b>₹${brMap['Branch 2'].rev}</b></td><td><b>₹${tRev}</b></td></tr>
+  </tbody></table>
+  <div class="two">
+    <div><h3>Category Breakdown</h3><table><thead><tr><th>Category</th><th>Qty</th><th>Revenue</th></tr></thead><tbody>
+      ${Object.entries(catMap).sort((a,b)=>b[1].rev-a[1].rev).map(([c,d])=>`<tr><td>${c}</td><td>${d.qty}</td><td>₹${d.rev}</td></tr>`).join('')||'<tr><td colspan="3">No sales</td></tr>'}
+    </tbody></table></div>
+    <div><h3>Top Items</h3><table><thead><tr><th>Item</th><th>Qty</th><th>Revenue</th></tr></thead><tbody>
+      ${Object.entries(itemMap).sort((a,b)=>(b[1].b1+b[1].b2)-(a[1].b1+a[1].b2)).slice(0,8).map(([n,d])=>`<tr><td>${n}</td><td>${d.b1+d.b2}</td><td>₹${(d.b1+d.b2)*d.price}</td></tr>`).join('')||'<tr><td colspan="3">No sales</td></tr>'}
+    </tbody></table></div>
+  </div>
+  <h3>Stock Snapshot</h3>
+  <table><thead><tr><th>Item</th><th>Category</th><th>Price</th><th>Stock Br.1</th><th>Stock Br.2</th><th>Alert</th><th>Status</th></tr></thead><tbody>
+    ${products.map(p=>{const low=p.stock1<=p.minStock||p.stock2<=p.minStock;return`<tr style="${low?'background:#fff0f0':''}"><td>${p.name}</td><td>${p.cat}</td><td>₹${p.price}</td><td>${p.stock1}</td><td>${p.stock2}</td><td>${p.minStock}</td><td>${low?'⚠ LOW':'OK'}</td></tr>`}).join('')}
+  </tbody></table>
+  <div class="footer">Insta Momos POS · academictechnexus.com · ${new Date().toLocaleString('en-IN')}</div>
+  </body></html>`;
+  const w=window.open('','_blank','width=900,height=700');w.document.write(html);w.document.close();w.focus();setTimeout(()=>w.print(),500);
+}
+
+/* ══════════════════════════════════════
+   ADMIN PANEL
+══════════════════════════════════════ */
+function renderAdminPanel(){
+  const today=new Date().toDateString();
+  const ts=sales.filter(s=>s.ts&&new Date(s.ts).toDateString()===today);
+  const bm={'Branch 1':{orders:0,rev:0},'Branch 2':{orders:0,rev:0}};
+  ts.forEach(s=>{if(!bm[s.branch])bm[s.branch]={orders:0,rev:0};bm[s.branch].orders++;bm[s.branch].rev+=s.total||0});
+  const brb=document.getElementById('admin-branch-rev');
+  if(brb)brb.innerHTML=Object.entries(bm).map(([b,d])=>`<tr><td>${b==='Branch 1'?'<span class="badge badge-b1">Branch 1</span>':'<span class="badge badge-b2">Branch 2</span>'}</td><td>${d.orders}</td><td class="c-gold">₹${d.rev}</td><td class="c-muted">₹${d.orders?Math.round(d.rev/d.orders):0}</td></tr>`).join('');
+  const im={};
+  sales.forEach(s=>(s.items||[]).forEach(i=>{if(!im[i.name])im[i.name]={qty:0,rev:0};im[i.name].qty+=i.qty;im[i.name].rev+=i.price*i.qty}));
+  const tb=document.getElementById('admin-top-items');
+  if(tb){const s=Object.entries(im).sort((a,b)=>b[1].qty-a[1].qty).slice(0,10);tb.innerHTML=s.length?s.map(([n,d],i)=>`<tr><td>${['🥇','🥈','🥉'][i]||i+1}</td><td class="fw7">${n}</td><td>${d.qty}</td><td class="c-gold">₹${d.rev}</td></tr>`).join(''):`<tr><td colspan="4" class="empty-row">No sales yet</td></tr>`}
+}
+async function savePin(role){
+  const input=document.getElementById(`new-pin-${role}`);
+  const val=input?.value?.trim();
+  if(!/^\d{4}$/.test(val)){toast('PIN must be exactly 4 digits','err');return}
+  try{if(!config.pins)config.pins={...DEF_PINS};config.pins[role]=val;
+    await db.collection(C_CFG).doc('settings').update({pins:config.pins});input.value='';
+    toast(`${role==='admin'?'Admin':role==='b1'?'Branch 1':'Branch 2'} PIN updated!`);}
+  catch(e){toast('Error: '+e.message,'err')}
+}
+
+/* ══ BOOT ══ */
+init();
+</script>
+</body>
+</html>
