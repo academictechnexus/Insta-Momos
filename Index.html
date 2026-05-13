@@ -369,11 +369,10 @@ select option{background:var(--dark)}
               <input id="cust-phone" placeholder="Phone number (optional)">
             </div>
             <div class="cr"><span>Subtotal</span><span id="c-sub">₹0</span></div>
-            <div class="cr"><span>GST (5%)</span><span id="c-gst">₹0</span></div>
+            <div class="cr"><span id="c-gst-label">GST (5%)</span><span id="c-gst">₹0</span></div>
             <div class="cr total"><span>TOTAL</span><span id="c-total">₹0</span></div>
             <div style="display:flex;gap:8px;margin-top:12px">
-              <button class="btn btn-outline" style="flex:1" onclick="previewBill()">Preview</button>
-              <button class="btn btn-gold" style="flex:1" onclick="finalizeBill()">Generate Bill</button>
+              <button class="btn btn-gold" style="flex:1;justify-content:center" onclick="finalizeBill()">🧾 Generate Invoice</button>
             </div>
           </div>
         </div>
@@ -516,7 +515,7 @@ select option{background:var(--dark)}
           </div>
         </div>
         <table>
-          <thead><tr><th>Bill #</th><th>Date & Time</th><th>Branch</th><th>Customer</th><th>Items</th><th>Total</th><th>Status</th><th>Reprint</th></tr></thead>
+          <thead><tr><th>Invoice #</th><th>Date & Time</th><th>Branch</th><th>Customer</th><th>Items</th><th>GST</th><th>Total</th><th>Status</th><th>Invoice</th></tr></thead>
           <tbody id="hist-body"></tbody>
         </table>
       </div>
@@ -571,6 +570,28 @@ select option{background:var(--dark)}
           <table><thead><tr><th>Rank</th><th>Item</th><th>Qty Sold</th><th>Revenue</th></tr></thead><tbody id="admin-top-items"></tbody></table>
         </div>
       </div>
+      <!-- GST SETTING -->
+      <div class="tw" style="margin-bottom:22px">
+        <div class="tw-head"><div class="tw-title">🧾 GST / Tax Settings</div></div>
+        <div style="padding:20px;display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap">
+          <div>
+            <label>Current GST Rate</label>
+            <div style="font-family:'Bebas Neue';font-size:40px;color:var(--gold)" id="gst-display">5%</div>
+            <div style="font-size:11px;color:var(--muted2);margin-top:2px">Applied to all bills</div>
+          </div>
+          <div style="flex:1;max-width:260px">
+            <div class="form-group">
+              <label>New GST Rate (%)</label>
+              <input id="new-gst" type="number" min="0" max="100" step="0.5" placeholder="e.g. 5 or 12 or 18">
+            </div>
+            <button class="btn btn-gold" onclick="saveGST()">💾 Update GST Rate</button>
+          </div>
+          <div class="info-box" style="flex:2;margin:0">
+            <b>Note:</b> Changing GST only affects <b>new bills</b> going forward. All previously generated invoices retain their original GST amount stored in Firebase. Common rates: 5% (food), 12%, 18%.
+          </div>
+        </div>
+      </div>
+
       <div class="tw">
         <div class="tw-head"><div class="tw-title">🔐 Change PINs</div></div>
         <div style="padding:20px;display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
@@ -607,12 +628,17 @@ select option{background:var(--dark)}
   </div>
 </div>
 
-<!-- BILL PREVIEW MODAL -->
+<!-- BILL / INVOICE MODAL -->
 <div class="modal-overlay" id="bill-modal">
-  <div class="modal" style="width:440px">
-    <div class="modal-head"><div class="modal-title">Bill Preview</div><button class="modal-close" onclick="closeModal('bill-modal')">✕</button></div>
-    <div class="modal-body" id="bill-preview-body"></div>
-    <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('bill-modal')">Close</button><button class="btn btn-gold" onclick="doPrint(printHTML)">🖨 Print</button></div>
+  <div class="modal" style="width:500px">
+    <div class="modal-head">
+      <div class="modal-title" id="bill-modal-title">Invoice Preview</div>
+      <button class="modal-close" onclick="closeModal('bill-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="bill-preview-body" style="background:#fff;padding:28px"></div>
+    <div class="modal-foot" id="bill-modal-foot">
+      <!-- Buttons injected dynamically based on role -->
+    </div>
   </div>
 </div>
 
@@ -621,7 +647,7 @@ select option{background:var(--dark)}
 <script>
 
 const firebaseConfig = {
-    apiKey: "AIzaSyCoBxwAL779odAToA_lF3AQmeJxvRxK8LI",
+  apiKey: "AIzaSyCoBxwAL779odAToA_lF3AQmeJxvRxK8LI",
   authDomain: "insta-momos-pos.firebaseapp.com",
   projectId: "insta-momos-pos",
   storageBucket: "insta-momos-pos.firebasestorage.app",
@@ -660,6 +686,7 @@ let db, currentRole=null, products=[], sales=[], stockLogs=[], transfers=[], con
 let cart=[], selectedCat='All', printHTML='', billCounter=1000;
 let unsubProd=null, unsubSale=null, unsubLog=null, unsubTran=null;
 let reportData=null;
+let gstRate=5; // default 5%, loaded from Firebase config
 
 /* ══════════════════════════════════════
    INIT
@@ -671,8 +698,8 @@ async function init(){
     await db.collection(C_CFG).doc('ping').set({ts:Date.now()});
     const cfgDoc=await db.collection(C_CFG).doc('settings').get();
     if(!cfgDoc.exists){
-      await db.collection(C_CFG).doc('settings').set({pins:DEF_PINS,billCounter:1000});
-      config={pins:{...DEF_PINS},billCounter:1000};
+      await db.collection(C_CFG).doc('settings').set({pins:DEF_PINS,billCounter:1000,gstRate:5});
+      config={pins:{...DEF_PINS},billCounter:1000,gstRate:5};
       const batch=db.batch();
       DEF_PRODUCTS.forEach(p=>batch.set(db.collection(C_PROD).doc(),{...p,createdAt:Date.now()}));
       await batch.commit();
@@ -680,6 +707,7 @@ async function init(){
     }else{
       config=cfgDoc.data();
       billCounter=config.billCounter||1000;
+      gstRate=config.gstRate!=null?config.gstRate:5;
     }
     document.getElementById('loading-screen').style.display='none';
     document.getElementById('login-screen').style.display='flex';
@@ -779,6 +807,13 @@ function switchTab(tab,el){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
   el.classList.add('active');
+  if(tab==='dashboard')   renderDashboard();
+  if(tab==='billing')     renderMenuGrid();
+  if(tab==='inventory')   renderInventory();
+  if(tab==='history')     renderHistory();
+  if(tab==='adminpanel')  {renderAdminPanel();refreshGSTDisplay();}
+  if(tab==='stock')       renderStockEntryTable();
+  if(tab==='transfer')    updateTransferPreview();
 }
 
 /* ══ HELPERS ══ */
@@ -866,57 +901,180 @@ function renderCart(){
     <div class="ci-info"><div class="ci-name">${ci.name}</div><div class="ci-unit">₹${ci.price} each</div></div>
     <div class="qty-c"><button class="qb" onclick="changeQty(${i},-1)">−</button><div class="qn">${ci.qty}</div><button class="qb" onclick="changeQty(${i},1)">+</button></div>
     <div class="ci-price">₹${ci.price*ci.qty}</div></div>`).join('');
-  const sub=cart.reduce((a,c)=>a+c.price*c.qty,0),gst=Math.round(sub*.05);
+  const sub=cart.reduce((a,c)=>a+c.price*c.qty,0),gst=Math.round(sub*(gstRate/100));
   document.getElementById('c-sub').textContent='₹'+sub;
   document.getElementById('c-gst').textContent='₹'+gst;
+  document.getElementById('c-gst-label').textContent=`GST (${gstRate}%)`;
   document.getElementById('c-total').textContent='₹'+(sub+gst);
 }
 
-/* ══ BILL ══ */
-function buildBillHTML(billNo,ts){
-  const cName=document.getElementById('cust-name').value||'Walk-in Customer';
-  const cPhone=document.getElementById('cust-phone').value;
-  const sub=cart.reduce((a,c)=>a+c.price*c.qty,0),gst=Math.round(sub*.05),total=sub+gst;
-  const dt=ts?fmtDate(ts):new Date().toLocaleString('en-IN');
-  return`<div style="font-family:Georgia,serif;color:#111;max-width:360px;margin:0 auto">
-    <div style="text-align:center;margin-bottom:14px">
-      <div style="font-size:32px;font-weight:700;color:#cc0000;letter-spacing:2px">INSTA MOMOS</div>
-      <div style="font-size:11px;letter-spacing:4px;color:#777">...DIP · BITE · ENJOY...</div>
-      <div style="font-size:12px;color:#555;margin-top:4px">${brLabel()} | @instamomos</div>
-      <div style="font-size:11px;color:#888">📞 +91 94452 36096 / +91 90038 43490</div>
+/* ══ INVOICE BUILDER ══ */
+function buildInvoiceHTML(billNo, ts, itemsArr, custName, custPhone, branch, sub, gst, total, gstPct){
+  const dt = ts ? fmtDate(ts) : new Date().toLocaleString('en-IN');
+  const invNo = String(billNo||'PREVIEW').padStart(6,'0');
+  return `<div style="font-family:Arial,sans-serif;color:#111;max-width:420px;margin:0 auto;font-size:13px">
+    <!-- HEADER -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+      <div>
+        <div style="font-size:26px;font-weight:900;color:#cc0000;letter-spacing:2px;line-height:1">INSTA MOMOS</div>
+        <div style="font-size:9px;letter-spacing:3px;color:#888;margin-top:2px">...DIP · BITE · ENJOY...</div>
+        <div style="font-size:11px;color:#555;margin-top:4px">${branch} | @instamomos</div>
+        <div style="font-size:10px;color:#888">📞 +91 94452 36096 / +91 90038 43490</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#aaa;margin-bottom:3px">Invoice No.</div>
+        <div style="font-size:18px;font-weight:700;color:#cc0000;font-family:monospace">#${invNo}</div>
+        <div style="font-size:10px;color:#666;margin-top:4px">${dt}</div>
+      </div>
     </div>
-    <hr style="border:none;border-top:2px dashed #ccc;margin:10px 0">
-    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><b>Bill # ${billNo||'PREVIEW'}</b><span>${dt}</span></div>
-    <div style="font-size:12px">Customer: <b>${cName}</b>${cPhone?' | '+cPhone:''}</div>
-    <hr style="border:none;border-top:2px dashed #ccc;margin:10px 0">
-    <table style="width:100%;font-size:13px;border-collapse:collapse">
-      <thead><tr style="border-bottom:1px solid #ddd"><th style="text-align:left;padding:4px 0">Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Amount</th></tr></thead>
-      <tbody>${cart.map(ci=>`<tr><td style="padding:5px 0">${ci.name}</td><td style="text-align:center">×${ci.qty}</td><td style="text-align:right">₹${ci.price*ci.qty}</td></tr>`).join('')}</tbody>
+    <hr style="border:none;border-top:2px solid #222;margin:10px 0">
+    <!-- CUSTOMER -->
+    <div style="display:flex;justify-content:space-between;margin-bottom:12px;font-size:11px">
+      <div><span style="color:#888">Customer: </span><b>${custName}</b>${custPhone?'<br><span style="color:#888">Phone: </span>'+custPhone:''}</div>
+      <div style="text-align:right"><span style="background:#f5c518;color:#000;padding:2px 8px;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase">PAID</span></div>
+    </div>
+    <!-- ITEMS TABLE -->
+    <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
+      <thead>
+        <tr style="background:#111;color:#fff">
+          <th style="padding:7px 8px;text-align:left;font-size:10px;letter-spacing:1px;text-transform:uppercase">#</th>
+          <th style="padding:7px 8px;text-align:left;font-size:10px;letter-spacing:1px;text-transform:uppercase">Item</th>
+          <th style="padding:7px 8px;text-align:center;font-size:10px;letter-spacing:1px;text-transform:uppercase">Qty</th>
+          <th style="padding:7px 8px;text-align:right;font-size:10px;letter-spacing:1px;text-transform:uppercase">Rate</th>
+          <th style="padding:7px 8px;text-align:right;font-size:10px;letter-spacing:1px;text-transform:uppercase">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemsArr.map((ci,i)=>`<tr style="border-bottom:1px solid #eee">
+          <td style="padding:7px 8px;color:#888">${i+1}</td>
+          <td style="padding:7px 8px;font-weight:600">${ci.name}</td>
+          <td style="padding:7px 8px;text-align:center">${ci.qty}</td>
+          <td style="padding:7px 8px;text-align:right">₹${ci.price}</td>
+          <td style="padding:7px 8px;text-align:right;font-weight:700">₹${ci.price*ci.qty}</td>
+        </tr>`).join('')}
+      </tbody>
     </table>
-    <hr style="border:none;border-top:2px dashed #ccc;margin:10px 0">
-    <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span>Subtotal</span><span>₹${sub}</span></div>
-    <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px"><span>GST (5%)</span><span>₹${gst}</span></div>
-    <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:700;border-top:2px solid #111;padding-top:8px"><span>TOTAL</span><span>₹${total}</span></div>
-    <hr style="border:none;border-top:2px dashed #ccc;margin:12px 0">
-    <div style="text-align:center;font-size:11px;color:#888;line-height:1.7">Thank you for visiting! 🙏<br>academictechnexus.com | @instamomos</div>
+    <!-- TOTALS -->
+    <div style="border-top:1px solid #ddd;padding-top:10px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12px"><span style="color:#555">Subtotal</span><span>₹${sub}</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:12px"><span style="color:#555">GST @ ${gstPct}%</span><span>₹${gst}</span></div>
+      <div style="display:flex;justify-content:space-between;background:#111;color:#fff;padding:10px 8px;margin-top:6px">
+        <span style="font-weight:700;letter-spacing:1px;font-size:14px">TOTAL AMOUNT</span>
+        <span style="font-weight:700;font-size:18px;color:#f5c518">₹${total}</span>
+      </div>
+    </div>
+    <!-- FOOTER -->
+    <div style="text-align:center;margin-top:16px;padding-top:12px;border-top:1px dashed #ccc;font-size:10px;color:#aaa;line-height:1.8">
+      Thank you for your visit! 🙏<br>
+      This is a computer-generated invoice.<br>
+      academictechnexus.com | @instamomos
+    </div>
   </div>`;
 }
-function doPrint(html){const w=window.open('','_blank','width=480,height=720');w.document.write(`<!DOCTYPE html><html><head><style>body{margin:0;padding:20px;background:#fff;font-family:Georgia,serif}</style></head><body>${html}</body></html>`);w.document.close();w.focus();setTimeout(()=>{w.print();w.close()},400)}
-function previewBill(){if(!cart.length){toast('Cart is empty!','err');return}printHTML=buildBillHTML();document.getElementById('bill-preview-body').innerHTML=printHTML;openModal('bill-modal')}
+
+/* Build from current cart state */
+function buildCurrentInvoiceHTML(billNo, ts){
+  const custName  = document.getElementById('cust-name').value  || 'Walk-in Customer';
+  const custPhone = document.getElementById('cust-phone').value || '';
+  const sub   = cart.reduce((a,c)=>a+c.price*c.qty, 0);
+  const gst   = Math.round(sub * (gstRate/100));
+  const total = sub + gst;
+  return buildInvoiceHTML(billNo, ts, cart, custName, custPhone, brLabel(), sub, gst, total, gstRate);
+}
+
+/* Build from a saved sale record */
+function buildSaleInvoiceHTML(s){
+  return buildInvoiceHTML(
+    s.billNo || s.id.slice(-5), s.ts,
+    s.items || [], s.customer || 'Walk-in', s.phone || '',
+    s.branch, s.sub, s.gst, s.total, s.gstRate ?? gstRate
+  );
+}
+
+function openInvoiceModal(html, isAdmin){
+  document.getElementById('bill-preview-body').innerHTML = html;
+  document.getElementById('bill-modal-title').textContent = isAdmin ? 'Invoice — Admin View' : 'Invoice (View Only)';
+  const foot = document.getElementById('bill-modal-foot');
+  if(isAdmin){
+    foot.innerHTML = `
+      <button class="btn btn-outline" onclick="closeModal('bill-modal')">Close</button>
+      <button class="btn btn-outline" onclick="doPrint(currentInvoiceHTML)">🖨 Print</button>
+      <button class="btn btn-gold" onclick="downloadInvoicePDF(currentInvoiceHTML)">⬇ Download PDF</button>`;
+  } else {
+    foot.innerHTML = `
+      <button class="btn btn-outline" onclick="closeModal('bill-modal')">Close</button>
+      <div style="font-size:11px;color:var(--muted2);padding:4px 0;letter-spacing:1px">View only — contact admin to download</div>`;
+  }
+  currentInvoiceHTML = html;
+  openModal('bill-modal');
+}
+
+let currentInvoiceHTML = '';
+
+function doPrint(html){
+  const w = window.open('','_blank','width=520,height=780');
+  w.document.write(`<!DOCTYPE html><html><head>
+    <style>body{margin:0;padding:24px;background:#fff;font-family:Arial,sans-serif}
+    @media print{@page{margin:10mm}}</style>
+  </head><body>${html}</body></html>`);
+  w.document.close(); w.focus(); setTimeout(()=>{w.print();},500);
+}
+
+function downloadInvoicePDF(html){
+  // Opens print dialog in a new window — user selects "Save as PDF" destination
+  const w = window.open('','_blank','width=520,height=780');
+  w.document.write(`<!DOCTYPE html><html><head>
+    <title>Invoice - Insta Momos</title>
+    <style>
+      body{margin:0;padding:24px;background:#fff;font-family:Arial,sans-serif}
+      @media print{@page{size:A5;margin:8mm}body{padding:0}}
+    </style>
+  </head><body>
+    ${html}
+    <script>
+      window.onload = function(){
+        window.print();
+      };
+    <\/script>
+  </body></html>`);
+  w.document.close();
+}
+
 async function finalizeBill(){
   if(!cart.length){toast('Cart is empty!','err');return}
-  const sub=cart.reduce((a,c)=>a+c.price*c.qty,0),gst=Math.round(sub*.05),total=sub+gst;
-  const bk=brKey(),now=Date.now();billCounter++;
-  const batch=db.batch();
-  cart.forEach(ci=>{const p=products.find(x=>x.id===ci.id);if(!p)return;const u={};u[bk]=Math.max(0,(p[bk]||0)-ci.qty);batch.update(db.collection(C_PROD).doc(ci.id),u)});
-  const sRef=db.collection(C_SALE).doc();
-  batch.set(sRef,{billNo:billCounter,ts:now,branch:brLabel(),customer:document.getElementById('cust-name').value||'Walk-in',phone:document.getElementById('cust-phone').value||'',items:cart.map(ci=>({name:ci.name,cat:ci.cat,price:ci.price,qty:ci.qty})),sub,gst,total,status:'Paid'});
+  const sub   = cart.reduce((a,c)=>a+c.price*c.qty, 0);
+  const gst   = Math.round(sub * (gstRate/100));
+  const total = sub + gst;
+  const bk    = brKey(), now = Date.now();
+  billCounter++;
+  const batch = db.batch();
+  cart.forEach(ci=>{
+    const p=products.find(x=>x.id===ci.id); if(!p)return;
+    const u={}; u[bk]=Math.max(0,(p[bk]||0)-ci.qty);
+    batch.update(db.collection(C_PROD).doc(ci.id),u);
+  });
+  const sRef = db.collection(C_SALE).doc();
+  batch.set(sRef,{
+    billNo:billCounter, ts:now, branch:brLabel(),
+    customer:document.getElementById('cust-name').value||'Walk-in',
+    phone:document.getElementById('cust-phone').value||'',
+    items:cart.map(ci=>({name:ci.name,cat:ci.cat,price:ci.price,qty:ci.qty})),
+    sub, gst, gstRate, total, status:'Paid'
+  });
   batch.update(db.collection(C_CFG).doc('settings'),{billCounter});
   try{
     await batch.commit();
-    printHTML=buildBillHTML(billCounter,now);doPrint(printHTML);
-    cart=[];document.getElementById('cust-name').value='';document.getElementById('cust-phone').value='';
-    renderCart();closeModal('bill-modal');toast(`✓ Bill #${billCounter} saved! ₹${total}`);
+    const invoiceHTML = buildCurrentInvoiceHTML(billCounter, now);
+    // Show invoice in modal — admin can download, branch can view only
+    const custNameVal  = document.getElementById('cust-name').value  || 'Walk-in Customer';
+    const custPhoneVal = document.getElementById('cust-phone').value || '';
+    // Reset cart
+    cart=[];
+    document.getElementById('cust-name').value='';
+    document.getElementById('cust-phone').value='';
+    renderCart();
+    toast(`✓ Invoice #${String(billCounter).padStart(6,'0')} saved! ₹${total}`);
+    openInvoiceModal(invoiceHTML, currentRole==='admin');
   }catch(e){toast('Save failed: '+e.message,'err')}
 }
 
@@ -1099,27 +1257,41 @@ function renderHistory(){
   const df=document.getElementById('hist-date')?.value||'';
   const filtered=sales.filter(s=>(!bf||s.branch===bf)&&(!df||(s.ts&&isoDate(s.ts)===df)));
   const body=document.getElementById('hist-body');if(!body)return;
+  const isAdmin=currentRole==='admin';
   body.innerHTML=filtered.length
-    ?filtered.map(s=>`<tr>
-        <td style="font-family:'Space Mono';font-size:11px;color:var(--gold)">#${s.billNo||s.id.slice(-5)}</td>
-        <td style="font-size:12px">${fmtDate(s.ts)}</td>
-        <td>${s.branch==='Branch 1'?'<span class="badge badge-b1">Br.1</span>':'<span class="badge badge-b2">Br.2</span>'}</td>
-        <td>${s.customer||'—'}<br><span style="font-size:11px;color:var(--muted2)">${s.phone||''}</span></td>
-        <td style="font-size:11px;color:var(--muted2);max-width:180px">${(s.items||[]).map(i=>i.name+'×'+i.qty).join(', ')}</td>
-        <td class="c-gold fw7" style="font-size:15px">₹${s.total}</td>
-        <td><span class="badge badge-paid">Paid</span></td>
-        <td><button class="btn btn-outline btn-sm" onclick="reprintSale('${s.id}')">Reprint</button></td>
-      </tr>`).join('')
-    :`<tr><td colspan="8" class="empty-row">No sales found</td></tr>`;
+    ?filtered.map(s=>{
+        const invNo=String(s.billNo||s.id.slice(-5)).padStart(6,'0');
+        const invoiceBtn=isAdmin
+          ?`<div style="display:flex;gap:5px;flex-wrap:wrap">
+              <button class="btn btn-outline btn-sm" onclick="viewSaleInvoice('${s.id}')">👁 View</button>
+              <button class="btn btn-gold btn-sm" onclick="downloadSaleInvoice('${s.id}')">⬇ PDF</button>
+            </div>`
+          :`<button class="btn btn-outline btn-sm" onclick="viewSaleInvoice('${s.id}')">👁 View</button>`;
+        return`<tr>
+          <td style="font-family:'Space Mono';font-size:11px;color:var(--gold)">#${invNo}</td>
+          <td style="font-size:12px">${fmtDate(s.ts)}</td>
+          <td>${s.branch==='Branch 1'?'<span class="badge badge-b1">Br.1</span>':'<span class="badge badge-b2">Br.2</span>'}</td>
+          <td>${s.customer||'—'}<br><span style="font-size:11px;color:var(--muted2)">${s.phone||''}</span></td>
+          <td style="font-size:11px;color:var(--muted2);max-width:160px">${(s.items||[]).map(i=>i.name+'×'+i.qty).join(', ')}</td>
+          <td style="font-size:11px;color:var(--muted2)">${s.gstRate!=null?s.gstRate:gstRate}%</td>
+          <td class="c-gold fw7" style="font-size:15px">₹${s.total}</td>
+          <td><span class="badge badge-paid">Paid</span></td>
+          <td>${invoiceBtn}</td>
+        </tr>`;
+      }).join('')
+    :`<tr><td colspan="9" class="empty-row">No sales found</td></tr>`;
 }
-function reprintSale(sid){
+
+function viewSaleInvoice(sid){
   const s=sales.find(x=>x.id===sid);if(!s)return;
-  const oldCart=[...cart],oldN=document.getElementById('cust-name').value,oldP=document.getElementById('cust-phone').value;
-  cart=(s.items||[]).map(i=>({id:'',name:i.name,cat:i.cat,price:i.price,qty:i.qty}));
-  document.getElementById('cust-name').value=s.customer||'';document.getElementById('cust-phone').value=s.phone||'';
-  const html=buildBillHTML(s.billNo||s.id.slice(-5),s.ts);
-  cart=oldCart;document.getElementById('cust-name').value=oldN;document.getElementById('cust-phone').value=oldP;
-  doPrint(html);
+  const html=buildSaleInvoiceHTML(s);
+  openInvoiceModal(html, currentRole==='admin');
+}
+
+function downloadSaleInvoice(sid){
+  const s=sales.find(x=>x.id===sid);if(!s)return;
+  const html=buildSaleInvoiceHTML(s);
+  downloadInvoicePDF(html);
 }
 function exportHistoryCSV(){
   const bf=document.getElementById('hist-branch')?.value||'';
@@ -1266,6 +1438,29 @@ function renderAdminPanel(){
   const tb=document.getElementById('admin-top-items');
   if(tb){const s=Object.entries(im).sort((a,b)=>b[1].qty-a[1].qty).slice(0,10);tb.innerHTML=s.length?s.map(([n,d],i)=>`<tr><td>${['🥇','🥈','🥉'][i]||i+1}</td><td class="fw7">${n}</td><td>${d.qty}</td><td class="c-gold">₹${d.rev}</td></tr>`).join(''):`<tr><td colspan="4" class="empty-row">No sales yet</td></tr>`}
 }
+/* ══ GST MANAGEMENT ══ */
+function refreshGSTDisplay(){
+  const el=document.getElementById('gst-display');
+  if(el) el.textContent=gstRate+'%';
+  const inp=document.getElementById('new-gst');
+  if(inp) inp.placeholder=`Current: ${gstRate}%`;
+}
+
+async function saveGST(){
+  const inp=document.getElementById('new-gst');
+  const val=parseFloat(inp?.value);
+  if(isNaN(val)||val<0||val>100){toast('Enter a valid GST % (0–100)','err');return}
+  try{
+    gstRate=val;
+    config.gstRate=val;
+    await db.collection(C_CFG).doc('settings').update({gstRate:val});
+    inp.value='';
+    refreshGSTDisplay();
+    renderCart(); // update live cart GST display
+    toast(`✓ GST updated to ${val}% — applies to all new bills`);
+  }catch(e){toast('Error: '+e.message,'err')}
+}
+
 async function savePin(role){
   const input=document.getElementById(`new-pin-${role}`);
   const val=input?.value?.trim();
